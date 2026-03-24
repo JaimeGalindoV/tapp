@@ -8,7 +8,7 @@ const List<SwipeContentItem> swipeContentItems = [
     type: ContentType.movie,
     genres: ['Sci-Fi', 'Adventure'],
     posterUrl:
-        'https://www.themoviedb.org/t/p/w600_and_h900_face/6o5cJjA4srfvU52UKWaqPUuPPgl.jpg',
+        'https://images.hdqwalls.com/download/dune-part-two-poster-5k-pb-1080x2400.jpg',
     platforms: ['Max', 'Prime Video'],
   ),
   SwipeContentItem(
@@ -18,7 +18,7 @@ const List<SwipeContentItem> swipeContentItems = [
     type: ContentType.series,
     genres: ['Crime', 'Drama'],
     posterUrl:
-        'https://image.tmdb.org/t/p/w780/ineLOBPG8AZsluYwnkMpHRyu7L.jpg',
+        'https://www.themoviedb.org/t/p/w600_and_h900_face/ztkUQFLlC19CCMYHW9o1zWhJRNq.jpg',
     platforms: ['Netflix'],
   ),
   SwipeContentItem(
@@ -38,7 +38,7 @@ const List<SwipeContentItem> swipeContentItems = [
     type: ContentType.movie,
     genres: ['Drama', 'Fantasy'],
     posterUrl:
-        'https://image.tmdb.org/t/p/w780/kCGlIMHnOm8JPXq3rXM6c5wMxcT.jpg',
+        'https://www.themoviedb.org/t/p/w600_and_h900_face/gNTWQuQCAjwOPwdxc3hDoVZfv5n.jpg',
     platforms: ['Disney+', 'Star+'],
   ),
   SwipeContentItem(
@@ -78,7 +78,7 @@ const List<SwipeContentItem> swipeContentItems = [
     type: ContentType.series,
     genres: ['Animation', 'Fantasy'],
     posterUrl:
-        'https://image.tmdb.org/t/p/w780/fqldf2t8ztc9aiwn3k6mlX3tvRT.jpg',
+        'https://www.themoviedb.org/t/p/w600_and_h900_face/i1vSPUbiBe2iK2HapGDfHItBFlC.jpg',
     platforms: ['Netflix'],
   ),
 ];
