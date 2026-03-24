@@ -1,30 +1,77 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:tapp/main.dart';
+import 'package:provider/provider.dart';
+import 'package:tapp/pages/home.dart';
+import 'package:tapp/pages/main_page.dart';
+import 'package:tapp/pages/profile.dart';
+import 'package:tapp/providers/likes_provider.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('Home renders Tinder-like swiper and action buttons', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => LikesProvider()),
+        ],
+        child: const MaterialApp(
+          home: HomePage(),
+        ),
+      ),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    expect(find.byType(CardSwiper), findsOneWidget);
+    expect(find.byKey(const Key('home_card_swiper')), findsOneWidget);
+    expect(find.bySemanticsLabel('Nopp!'), findsOneWidget);
+    expect(find.bySemanticsLabel('Tapp!'), findsOneWidget);
+    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('Profile shows empty sections when there are no likes', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => LikesProvider()),
+        ],
+        child: const MaterialApp(
+          home: ProfilePage(),
+        ),
+      ),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Series'), findsOneWidget);
+    expect(find.text('Peliculas'), findsOneWidget);
+    expect(find.text('No likes yet in Series'), findsOneWidget);
+    expect(find.text('No likes yet in Peliculas'), findsOneWidget);
+  });
+
+  testWidgets('Home Tapp adds likes and they appear on Profile', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => LikesProvider()),
+        ],
+        child: const MaterialApp(
+          home: MainPage(),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.favorite_rounded));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Peliculas'), findsOneWidget);
+    expect(find.text('Dune: Part Two'), findsOneWidget);
   });
 }
+

@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tapp/pages/main_page.dart';
 import 'package:tapp/pages/login_page.dart';
+import 'package:tapp/pages/main_page.dart';
 import 'package:tapp/providers/auth_provider.dart';
+import 'package:tapp/providers/likes_provider.dart';
 import 'package:tapp/theme/app_theme.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AuthProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => LikesProvider()),
+      ],
       child: const MyApp(),
     ),
   );
