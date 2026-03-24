@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/widgets/login_header.dart';
 import 'package:tapp/widgets/login_submit_button.dart';
 import 'package:tapp/widgets/login_text_field.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key, required this.onLoginSuccess});
-
-  final VoidCallback onLoginSuccess;
+  const LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -44,7 +44,7 @@ class _LoginPageState extends State<LoginPage> {
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         setState(() => _isLoading = false);
-        widget.onLoginSuccess();
+        context.read<AuthProvider>().login();
       }
     });
   }
@@ -61,7 +61,6 @@ class _LoginPageState extends State<LoginPage> {
         child: Padding(
           padding: EdgeInsets.symmetric(
             horizontal: 24.0,
-            vertical: MediaQuery.of(context).padding.top + 24,
           ),
           child: Form(
             key: _formKey,

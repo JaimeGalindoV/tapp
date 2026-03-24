@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/widgets/my_navigation_bar.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key, required this.onLogout});
-
-  final VoidCallback onLogout;
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -13,7 +13,7 @@ class HomePage extends StatelessWidget {
         title: const Text('Tapp'),
         actions: [
           IconButton(
-            onPressed: onLogout,
+            onPressed: () => context.read<AuthProvider>().logout(),
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
           ),
