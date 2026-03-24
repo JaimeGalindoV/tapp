@@ -1,23 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/widgets/my_navigation_bar.dart';
+import 'package:tapp/widgets/custom_app_bar.dart';
 
+// This is a template to test nagivation but is necessary to create the home page.
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Tapp'),
-        actions: [
-          IconButton(
-            onPressed: () => context.read<AuthProvider>().logout(),
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-          ),
-        ],
+      appBar: CustomAppBar(
+        title: "Home",
+        showBackButton: false,
+        logoCentered: false,
       ),
       body: const Center(
         child: Text('Hello World'),

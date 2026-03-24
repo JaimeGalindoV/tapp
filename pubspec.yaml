@@ -92,3 +92,5 @@ flutter:
   assets:
     - assets/images/TappLogoBlack.png
     - assets/images/TappLogoWhite.png
+    - assets/images/LogoShortWhite.png
+    - assets/images/LogoShortBlack.png
