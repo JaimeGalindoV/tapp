@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
 
-class ConfigPage extends StatelessWidget {
-  const ConfigPage({super.key});
+class DetailPage extends StatelessWidget {
+  const DetailPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -10,12 +10,8 @@ class ConfigPage extends StatelessWidget {
       appBar: CustomAppBar(
         showBackButton: true, 
         logoCentered: true,
-        showConfigButton: false,
       ),
-      body: const Center(child: Text(
-        'Página de configuración',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-      )),
+      body: const Center(child: Text('Página de información de una publicación', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),)),
     );
   }
 }

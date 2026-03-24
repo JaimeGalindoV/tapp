@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tapp/pages/home.dart';
+import 'package:tapp/pages/main_page.dart';
 import 'package:tapp/pages/login_page.dart';
 import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/theme/app_theme.dart';
@@ -23,9 +23,8 @@ class MyApp extends StatelessWidget {
 
     return MaterialApp(
       title: 'Tapp',
-      debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: authProvider.isLoggedIn ? const HomePage() : const LoginPage(),
+      home: authProvider.isLoggedIn ? const MainPage() : const LoginPage(),
     );
   }
 }
