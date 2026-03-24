@@ -6,6 +6,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool showBackButton;
   final bool logoCentered;
   final bool showConfigButton;
+  final bool isOverlay;
 
   const CustomAppBar({
     super.key,
@@ -13,45 +14,60 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.showBackButton = false,
     this.logoCentered = false,
     this.showConfigButton = true,
+    this.isOverlay = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: AppBar(
-        backgroundColor: Colors.transparent,
-        // 1. lado izquierdo
-        leading: showBackButton 
-          ? IconButton(icon: const Icon(Icons.arrow_back_ios), onPressed: () => Navigator.pop(context))
+    final appBar = AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      iconTheme: const IconThemeData(color: Colors.white),
+      leading: showBackButton
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back_ios),
+              onPressed: () => Navigator.pop(context),
+            )
           : (!logoCentered ? _buildLogo() : null),
-      
-        // 2. centro
-        title: logoCentered ? _buildLogo() : Text(title ?? ""),
-        centerTitle: true,
-      
-        // 3. lado derecho
-        actions: [
-            Opacity(
-              opacity: showConfigButton ? 1.0 : 0.0,
-              child: IconButton(
-                icon: const Icon(Icons.tune), 
-                onPressed: showConfigButton ? () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const ConfigPage()),
-                  );
-                } : null,
-              ),
-            ),
-        ],
-      ),
+      title: logoCentered ? _buildLogo() : Text(title ?? ''),
+      centerTitle: true,
+      titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+      actions: [
+        Opacity(
+          opacity: showConfigButton ? 1.0 : 0.0,
+          child: IconButton(
+            icon: const Icon(Icons.tune),
+            onPressed: showConfigButton
+                ? () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ConfigPage(),
+                      ),
+                    );
+                  }
+                : null,
+          ),
+        ),
+      ],
+    );
+
+    if (isOverlay) {
+      return appBar;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: appBar,
     );
   }
 
   Widget _buildLogo() {
-    // El leading del AppBar agranda más el logo, así que lo hacemos más pequeño ahí
-    
     return Center(
       child: SizedBox(
         height: 30,
@@ -65,5 +81,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize {
+    return Size.fromHeight(kToolbarHeight + (isOverlay ? 0 : 16));
+  }
 }
