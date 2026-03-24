@@ -11,8 +11,6 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       appBar: CustomAppBar(
         title: "Home",
-        showBackButton: false,
-        logoCentered: false,
       ),
       body: const Center(
         child: Text('Hello World'),
