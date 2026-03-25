@@ -10,6 +10,9 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://images.hdqwalls.com/download/dune-part-two-poster-5k-pb-1080x2400.jpg',
     platforms: ['Max', 'Prime Video'],
+    rating: 4.6,
+    commentCount: 540,
+    durationMinutes: 166,
   ),
   SwipeContentItem(
     id: 's_breaking_bad',
@@ -20,6 +23,8 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/ztkUQFLlC19CCMYHW9o1zWhJRNq.jpg',
     platforms: ['Netflix'],
+    rating: 4.9,
+    commentCount: 2400,
   ),
   SwipeContentItem(
     id: 's_lupin',
@@ -30,6 +35,8 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://image.tmdb.org/t/p/w780/sgxawbFB5Vi5OkPWQLNfl3dvkNJ.jpg',
     platforms: ['Netflix'],
+    rating: 4.2,
+    commentCount: 860,
   ),
   SwipeContentItem(
     id: 'm_poor_things',
@@ -40,6 +47,9 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/gNTWQuQCAjwOPwdxc3hDoVZfv5n.jpg',
     platforms: ['Disney+', 'Star+'],
+    rating: 4.1,
+    commentCount: 390,
+    durationMinutes: 141,
   ),
   SwipeContentItem(
     id: 's_dark',
@@ -50,6 +60,8 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/hRP7N2uI0pokxnkcMFONoOZnxbv.jpg',
     platforms: ['Netflix'],
+    rating: 4.7,
+    commentCount: 1700,
   ),
   SwipeContentItem(
     id: 'm_the_batman',
@@ -60,6 +72,9 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://image.tmdb.org/t/p/w780/74xTEgt7R36Fpooo50r9T25onhq.jpg',
     platforms: ['Max', 'Apple TV'],
+    rating: 4.3,
+    commentCount: 1200,
+    durationMinutes: 176,
   ),
   SwipeContentItem(
     id: 'm_spider_verse',
@@ -70,6 +85,9 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/rXhgHQmtjTIQOEDU8E2TbUFMjWM.jpg',
     platforms: ['Netflix', 'Prime Video'],
+    rating: 4.8,
+    commentCount: 2300,
+    durationMinutes: 140,
   ),
   SwipeContentItem(
     id: 's_arcane',
@@ -80,5 +98,7 @@ const List<SwipeContentItem> swipeContentItems = [
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/i1vSPUbiBe2iK2HapGDfHItBFlC.jpg',
     platforms: ['Netflix'],
+    rating: 4.8,
+    commentCount: 1800,
   ),
 ];

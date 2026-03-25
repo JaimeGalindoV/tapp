@@ -4,17 +4,23 @@ import 'package:tapp/theme/app_colors.dart';
 class AppTheme {
   AppTheme._();
 
-  static ThemeData get dark {
+  static ThemeData get dark => _buildTheme(Brightness.dark);
+
+  static ThemeData get light => _buildTheme(Brightness.light);
+
+  static ThemeData _buildTheme(Brightness brightness) {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.brandPrimary,
-      brightness: Brightness.dark,
+      brightness: brightness,
     ).copyWith(primary: AppColors.brandPrimary);
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: brightness,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFF121212),
+      scaffoldBackgroundColor: brightness == Brightness.dark
+          ? const Color(0xFF121212)
+          : const Color(0xFFF5F5F7),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: colorScheme.primary,
@@ -22,9 +28,7 @@ class AppTheme {
           disabledBackgroundColor: colorScheme.surfaceContainerHighest,
           disabledForegroundColor: colorScheme.onSurface.withValues(alpha: 0.5),
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(

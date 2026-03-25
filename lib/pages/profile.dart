@@ -24,6 +24,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     final likesProvider = context.watch<LikesProvider>();
     final authProvider = context.watch<AuthProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
     final userProfile = authProvider.currentUser ?? _fallbackUserProfile();
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final bottomScrollPadding = bottomInset + 100;
@@ -38,11 +39,14 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: const CustomAppBar(title: 'Profile'),
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF2A2A2A), Color(0xFF141414)],
+            colors: [
+              colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+              colorScheme.surface,
+            ],
           ),
         ),
         child: SafeArea(
@@ -80,15 +84,15 @@ class _ProfilePageState extends State<ProfilePage> {
                     height: 200,
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: Colors.white10,
+                      color: colorScheme.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white12),
+                      border: Border.all(color: colorScheme.outlineVariant),
                     ),
                     alignment: Alignment.center,
-                    child: const Text(
+                    child: Text(
                       'Contenido oculto',
                       style: TextStyle(
-                        color: Colors.white70,
+                        color: colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -146,6 +150,9 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Row(
       children: [
         Container(
@@ -153,13 +160,15 @@ class _ProfileHeader extends StatelessWidget {
           height: 52,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.black,
-            border: Border.all(color: Colors.white12),
+            color: colorScheme.surfaceContainer,
+            border: Border.all(color: colorScheme.outlineVariant),
           ),
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Image.asset(
-              'assets/images/LogoShortWhite.png',
+              isDarkMode
+                  ? 'assets/images/LogoShortWhite.png'
+                  : 'assets/images/LogoShortBlack.png',
               fit: BoxFit.contain,
             ),
           ),
@@ -177,7 +186,10 @@ class _ProfileHeader extends StatelessWidget {
             Text(
               userProfile.followersLabel,
               key: const Key('profile_user_followers'),
-              style: const TextStyle(fontSize: 13, color: Colors.white70),
+              style: TextStyle(
+                fontSize: 13,
+                color: colorScheme.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -250,6 +262,8 @@ class _ActionIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return InkWell(
       key: Key(keyName),
       borderRadius: BorderRadius.circular(99),
@@ -259,13 +273,19 @@ class _ActionIcon extends StatelessWidget {
         height: 44,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isActive ? Colors.white12 : Colors.transparent,
+          color: isActive
+              ? colorScheme.surfaceContainerHigh
+              : Colors.transparent,
           border: Border.all(
-            color: isActive ? Colors.white : Colors.white38,
+            color: isActive ? colorScheme.onSurface : colorScheme.outline,
             width: isActive ? 2 : 1.3,
           ),
         ),
-        child: Icon(icon, color: Colors.white, size: isActive ? 24 : 22),
+        child: Icon(
+          icon,
+          color: colorScheme.onSurface,
+          size: isActive ? 24 : 22,
+        ),
       ),
     );
   }
@@ -284,6 +304,8 @@ class _ContentSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -298,15 +320,15 @@ class _ContentSection extends StatelessWidget {
             height: 190,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.white10,
+              color: colorScheme.surfaceContainerLow,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white12),
+              border: Border.all(color: colorScheme.outlineVariant),
             ),
             alignment: Alignment.center,
             child: Text(
               emptyLabel,
-              style: const TextStyle(
-                color: Colors.white70,
+              style: TextStyle(
+                color: colorScheme.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -356,12 +378,16 @@ class _ProfilePosterCard extends StatelessWidget {
                   width: double.infinity,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
-                    return const DecoratedBox(
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    return DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                          colors: [Color(0xFF3A3A3A), Color(0xFF161616)],
+                          colors: isDark
+                              ? const [Color(0xFF3A3A3A), Color(0xFF161616)]
+                              : const [Color(0xFFE2E2E2), Color(0xFFBEBEBE)],
                         ),
                       ),
                     );

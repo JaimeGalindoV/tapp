@@ -78,6 +78,14 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildMovieCard(BuildContext context, SwipeContentItem movie) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final chipColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.16)
+        : Colors.white.withValues(alpha: 0.88);
+    final chipBorderColor = isDarkMode
+        ? Colors.white.withValues(alpha: 0.25)
+        : Colors.black.withValues(alpha: 0.18);
+    final chipTextColor = isDarkMode ? Colors.white : Colors.black87;
 
     return GestureDetector(
       key: Key('home_tap_${movie.id}'),
@@ -105,16 +113,22 @@ class _HomePageState extends State<HomePage> {
               );
             },
           ),
-          const DecoratedBox(
+          DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x66000000),
-                  Colors.transparent,
-                  Color(0xCC000000),
-                ],
+                colors: isDarkMode
+                    ? const [
+                        Color(0x66000000),
+                        Colors.transparent,
+                        Color(0xCC000000),
+                      ]
+                    : const [
+                        Color(0x38000000),
+                        Color(0x10000000),
+                        Color(0xD9000000),
+                      ],
                 stops: [0.0, 0.46, 1.0],
               ),
             ),
@@ -131,6 +145,7 @@ class _HomePageState extends State<HomePage> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 44,
                     fontWeight: FontWeight.w900,
                     height: 0.95,
@@ -146,19 +161,19 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 10),
                 Text(
                   '${movie.year} | ${movie.genres.join(' | ')}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
-                    color: Colors.white70,
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
+                Text(
                   'Watch on',
-                  key: Key('watch_on_label'),
+                  key: const Key('watch_on_label'),
                   style: TextStyle(
                     fontSize: 13,
-                    color: Colors.white70,
+                    color: Colors.white.withValues(alpha: 0.9),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -174,15 +189,14 @@ class _HomePageState extends State<HomePage> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.16),
+                            color: chipColor,
                             borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.25),
-                            ),
+                            border: Border.all(color: chipBorderColor),
                           ),
                           child: Text(
                             platform,
-                            style: const TextStyle(
+                            style: TextStyle(
+                              color: chipTextColor,
                               fontWeight: FontWeight.w700,
                               fontSize: 12,
                             ),
@@ -203,7 +217,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const CustomAppBar(title: '', isOverlay: true),
+      appBar: const CustomAppBar(isOverlay: true),
       body: Stack(
         fit: StackFit.expand,
         children: [

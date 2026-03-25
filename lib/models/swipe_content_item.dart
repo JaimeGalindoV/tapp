@@ -12,6 +12,9 @@ class SwipeContentItem {
     required this.year,
     required this.genres,
     required this.platforms,
+    required this.rating,
+    required this.commentCount,
+    this.durationMinutes,
   });
 
   final String id;
@@ -21,4 +24,7 @@ class SwipeContentItem {
   final int year;
   final List<String> genres;
   final List<String> platforms;
+  final double rating;
+  final int commentCount;
+  final int? durationMinutes;
 }

@@ -5,12 +5,16 @@ class LoginHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 24),
           child: Image.asset(
-            'assets/images/TappLogoWhite.png',
+            isDarkMode
+                ? 'assets/images/TappLogoWhite.png'
+                : 'assets/images/TappLogoBlack.png',
             width: 200,
             fit: BoxFit.contain,
           ),
