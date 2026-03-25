@@ -203,7 +203,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const CustomAppBar(title: '', isOverlay: true),
+      appBar: const CustomAppBar(isOverlay: true),
       body: Stack(
         fit: StackFit.expand,
         children: [
