@@ -3,12 +3,15 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:tapp/data/swipe_content_data.dart';
+import 'package:tapp/pages/config_page.dart';
 import 'package:tapp/pages/detail.dart';
 import 'package:tapp/pages/home.dart';
 import 'package:tapp/pages/main_page.dart';
 import 'package:tapp/pages/profile.dart';
 import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
+import 'package:tapp/providers/theme_provider.dart';
+import 'package:tapp/theme/app_theme.dart';
 
 void main() {
   Future<void> pumpWithProviders(
@@ -16,17 +19,25 @@ void main() {
     required Widget home,
     AuthProvider? authProvider,
     LikesProvider? likesProvider,
+    ThemeProvider? themeProvider,
   }) async {
     final auth = authProvider ?? AuthProvider();
     final likes = likesProvider ?? LikesProvider();
+    final theme = themeProvider ?? ThemeProvider();
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<AuthProvider>.value(value: auth),
           ChangeNotifierProvider<LikesProvider>.value(value: likes),
+          ChangeNotifierProvider<ThemeProvider>.value(value: theme),
         ],
-        child: MaterialApp(home: home),
+        child: MaterialApp(
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: theme.themeMode,
+          home: home,
+        ),
       ),
     );
   }
@@ -181,7 +192,7 @@ void main() {
     expect(find.textContaining('siguen esta cuenta'), findsOneWidget);
   });
 
-  testWidgets('MainPage uses transparent overlay navigation bar', (
+  testWidgets('MainPage keeps transparent overlay navigation bar', (
     WidgetTester tester,
   ) async {
     await pumpWithProviders(tester, home: const MainPage());
@@ -252,4 +263,75 @@ void main() {
     final detailPage = tester.widget<DetailPage>(find.byType(DetailPage));
     expect(detailPage.contentId, 'm_dune_2');
   });
+
+  testWidgets('ConfigPage theme switch updates ThemeProvider mode', (
+    WidgetTester tester,
+  ) async {
+    final themeProvider = ThemeProvider();
+
+    await pumpWithProviders(
+      tester,
+      home: const ConfigPage(),
+      themeProvider: themeProvider,
+    );
+
+    expect(find.byKey(const Key('config_theme_switch_tile')), findsOneWidget);
+    expect(themeProvider.isDarkMode, true);
+    expect(find.text('Activado'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('config_theme_switch_tile')));
+    await tester.pumpAndSettle();
+
+    expect(themeProvider.isDarkMode, false);
+    expect(find.text('Desactivado'), findsOneWidget);
+  });
+
+  testWidgets(
+    'ConfigPage logout logs user out and pops back to root for auth redirect',
+    (WidgetTester tester) async {
+      final authProvider = AuthProvider()..login('demo@tapp.app');
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+            ChangeNotifierProvider<LikesProvider>.value(value: LikesProvider()),
+            ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            home: Builder(
+              builder: (context) {
+                return Scaffold(
+                  body: Center(
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const ConfigPage()),
+                        );
+                      },
+                      child: const Text('open_config'),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('open_config'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ConfigPage), findsOneWidget);
+      expect(authProvider.isLoggedIn, true);
+
+      await tester.tap(find.byKey(const Key('config_logout_tile')));
+      await tester.pumpAndSettle();
+
+      expect(authProvider.isLoggedIn, false);
+      expect(find.text('open_config'), findsOneWidget);
+      expect(find.byType(ConfigPage), findsNothing);
+    },
+  );
 }

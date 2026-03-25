@@ -18,6 +18,15 @@ class _MainPageState extends State<MainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final bool isHomeSelected = _currentPageIndex == 0;
+    final Color selectedColor = isHomeSelected
+        ? Colors.white
+        : colorScheme.onSurface;
+    final Color unselectedColor = isHomeSelected
+        ? Colors.white.withValues(alpha: 0.78)
+        : colorScheme.onSurfaceVariant;
+
     return Scaffold(
       key: const Key('main_page_scaffold'),
       extendBody: true,
@@ -27,17 +36,17 @@ class _MainPageState extends State<MainPage> {
         backgroundColor: Colors.transparent,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: Colors.white.withValues(alpha: 0.20),
+        indicatorColor: colorScheme.primary.withValues(alpha: 0.22),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(
-              color: Colors.white,
+            return TextStyle(
+              color: selectedColor,
               fontWeight: FontWeight.w700,
               fontSize: 12,
             );
           }
-          return const TextStyle(
-            color: Colors.white70,
+          return TextStyle(
+            color: unselectedColor,
             fontWeight: FontWeight.w600,
             fontSize: 12,
           );
@@ -49,15 +58,15 @@ class _MainPageState extends State<MainPage> {
             _currentPageIndex = index;
           });
         },
-        destinations: const [
+        destinations: [
           NavigationDestination(
-            icon: Icon(Icons.home, color: Colors.white70),
-            selectedIcon: Icon(Icons.home, color: Colors.white),
+            icon: Icon(Icons.home, color: unselectedColor),
+            selectedIcon: Icon(Icons.home, color: selectedColor),
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Icon(Icons.person, color: Colors.white70),
-            selectedIcon: Icon(Icons.person, color: Colors.white),
+            icon: Icon(Icons.person, color: unselectedColor),
+            selectedIcon: Icon(Icons.person, color: selectedColor),
             label: 'Profile',
           ),
         ],

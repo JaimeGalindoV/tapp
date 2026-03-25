@@ -19,24 +19,32 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final foregroundColor = isOverlay ? Colors.white : colorScheme.onSurface;
+
     final appBar = AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      iconTheme: const IconThemeData(color: Colors.white),
+      iconTheme: IconThemeData(color: foregroundColor),
       leading: showBackButton
           ? IconButton(
               icon: const Icon(Icons.arrow_back_ios),
               onPressed: () => Navigator.pop(context),
             )
-          : (!logoCentered ? _buildLogo() : null),
-      title: logoCentered ? _buildLogo() : Text(title ?? ''),
+          : (!logoCentered
+                ? _buildLogo(useLightAsset: isOverlay || isDark)
+                : null),
+      title: logoCentered
+          ? _buildLogo(useLightAsset: isOverlay || isDark)
+          : Text(title ?? ''),
       centerTitle: true,
       titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
+        color: foregroundColor,
+        fontWeight: FontWeight.w700,
+      ),
       actions: [
         Opacity(
           opacity: showConfigButton ? 1.0 : 0.0,
@@ -61,19 +69,18 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
       return appBar;
     }
 
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: appBar,
-    );
+    return Padding(padding: const EdgeInsets.all(8), child: appBar);
   }
 
-  Widget _buildLogo() {
+  Widget _buildLogo({required bool useLightAsset}) {
     return Center(
       child: SizedBox(
         height: 30,
         width: 30,
         child: Image.asset(
-          'assets/images/LogoShortWhite.png',
+          useLightAsset
+              ? 'assets/images/LogoShortWhite.png'
+              : 'assets/images/LogoShortBlack.png',
           fit: BoxFit.contain,
         ),
       ),

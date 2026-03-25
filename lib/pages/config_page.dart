@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:tapp/providers/auth_provider.dart';
+import 'package:tapp/providers/theme_provider.dart';
+import 'package:tapp/theme/app_colors.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
 
 class ConfigPage extends StatelessWidget {
@@ -6,16 +10,95 @@ class ConfigPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDarkMode = themeProvider.isDarkMode;
+
     return Scaffold(
-      appBar: CustomAppBar(
-        showBackButton: true, 
+      appBar: const CustomAppBar(
+        showBackButton: true,
         logoCentered: true,
         showConfigButton: false,
       ),
-      body: const Center(child: Text(
-        'Página de configuración',
-        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-      )),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              colorScheme.surfaceContainerHighest.withValues(alpha: 0.38),
+              colorScheme.surface,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+            children: [
+              Text(
+                'Configuracion',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLow.withValues(
+                    alpha: 0.75,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: colorScheme.outlineVariant),
+                ),
+                child: SwitchListTile.adaptive(
+                  key: const Key('config_theme_switch_tile'),
+                  title: const Text(
+                    'Modo oscuro',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    isDarkMode ? 'Activado' : 'Desactivado',
+                    key: const Key('config_theme_mode_label'),
+                  ),
+                  secondary: Icon(
+                    isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                    color: AppColors.brandPrimary,
+                  ),
+                  value: isDarkMode,
+                  onChanged: context.read<ThemeProvider>().setDarkMode,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: colorScheme.surfaceContainerLow.withValues(
+                    alpha: 0.75,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: colorScheme.outlineVariant),
+                ),
+                child: ListTile(
+                  key: const Key('config_logout_tile'),
+                  leading: const Icon(Icons.logout_rounded),
+                  title: const Text(
+                    'Cerrar sesion',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('Volver al inicio de sesion'),
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  onTap: () {
+                    context.read<AuthProvider>().logout();
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

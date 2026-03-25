@@ -9,11 +9,14 @@ class DetailPage extends StatelessWidget {
 
   final String contentId;
 
-  SwipeContentItem get content => swipeContentItems.firstWhere((item) => item.id == contentId);
+  SwipeContentItem get content =>
+      swipeContentItems.firstWhere((item) => item.id == contentId);
 
   @override
   Widget build(BuildContext context) {
     final item = content;
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -23,7 +26,7 @@ class DetailPage extends StatelessWidget {
         showConfigButton: true,
         isOverlay: true,
       ),
-      backgroundColor: const Color(0xFF0E0E11),
+      backgroundColor: colorScheme.surface,
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
@@ -36,26 +39,33 @@ class DetailPage extends StatelessWidget {
                   item.posterUrl,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => Container(
-                    color: const Color(0xFF1A1A20),
+                    color: colorScheme.surfaceContainerHigh,
                     alignment: Alignment.center,
-                    child: const Icon(
+                    child: Icon(
                       Icons.broken_image_outlined,
-                      color: Colors.white54,
+                      color: colorScheme.onSurfaceVariant,
                       size: 44,
                     ),
                   ),
                 ),
-                const DecoratedBox(
+                DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0x12000000),
-                        Color(0x520E0E11),
-                        Color(0xFF0E0E11),
-                        Color(0xFF0E0E11),
-                      ],
+                      colors: isDarkMode
+                          ? const [
+                              Color(0x12000000),
+                              Color(0x520E0E11),
+                              Color(0xFF0E0E11),
+                              Color(0xFF0E0E11),
+                            ]
+                          : const [
+                              Color(0x12000000),
+                              Color(0x3FFFFFFF),
+                              Color(0xFFF6F6F8),
+                              Color(0xFFF6F6F8),
+                            ],
                       stops: [0.0, 0.72, 0.96, 1.0],
                     ),
                   ),
@@ -80,8 +90,10 @@ class DetailPage extends StatelessWidget {
                       const SizedBox(height: 10),
                       Text(
                         '${item.type == ContentType.movie ? 'Pelicula' : 'Serie'} · ${item.year} · ${item.genres.join(' · ')}',
-                        style: const TextStyle(
-                          color: Colors.white70,
+                        style: TextStyle(
+                          color: isDarkMode
+                              ? Colors.white70
+                              : colorScheme.onSurfaceVariant,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -99,8 +111,8 @@ class DetailPage extends StatelessWidget {
               children: [
                 Text(
                   '${item.title} es una ${item.type == ContentType.movie ? 'pelicula' : 'serie'} de ${item.genres.join(', ')} estrenada en ${item.year}.',
-                  style: const TextStyle(
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: colorScheme.onSurfaceVariant,
                     fontSize: 20,
                     height: 1.4,
                   ),
@@ -112,40 +124,51 @@ class DetailPage extends StatelessWidget {
                       final star = index < item.rating.round()
                           ? Icons.star_rounded
                           : Icons.star_outline_rounded;
-                      return Icon(star, color: Colors.white, size: 31);
+                      return Icon(star, color: colorScheme.onSurface, size: 31);
                     }),
                     const SizedBox(width: 10),
                     Text(
                       item.rating.toStringAsFixed(1),
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const Spacer(),
-                    const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white70, size: 28),
+                    Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: colorScheme.onSurfaceVariant,
+                      size: 28,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       _formatCommentCount(item.commentCount),
-                      style: const TextStyle(color: Colors.white70, fontSize: 22),
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 22,
+                      ),
                     ),
                     const SizedBox(width: 18),
                     InkWell(
                       borderRadius: BorderRadius.circular(20),
                       onTap: () => _shareContent(item),
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(4),
-                        child: Icon(Icons.share_rounded, color: Colors.white70, size: 30),
+                        child: Icon(
+                          Icons.share_rounded,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 30,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 28),
-                const Text(
+                Text(
                   'STREAMING en',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: colorScheme.onSurfaceVariant,
                     fontSize: 24,
                     letterSpacing: 0.3,
                     fontWeight: FontWeight.w700,
@@ -158,16 +181,21 @@ class DetailPage extends StatelessWidget {
                   children: item.platforms
                       .map(
                         (platform) => Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF101014),
+                            color: colorScheme.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white10),
+                            border: Border.all(
+                              color: colorScheme.outlineVariant,
+                            ),
                           ),
                           child: Text(
                             platform,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -176,11 +204,12 @@ class DetailPage extends StatelessWidget {
                       .toList(),
                 ),
                 const SizedBox(height: 26),
-                if (item.type == ContentType.movie && item.durationMinutes != null)
+                if (item.type == ContentType.movie &&
+                    item.durationMinutes != null)
                   Text(
                     'Duracion: ${item.durationMinutes} min',
-                    style: const TextStyle(
-                      color: Colors.white60,
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
@@ -210,9 +239,6 @@ class DetailPage extends StatelessWidget {
         'Disponible en: ${item.platforms.join(', ')}\n\n'
         'Visto en Tapp.';
 
-    await Share.share(
-      message,
-      subject: 'Recomendacion: ${item.title}',
-    );
+    await Share.share(message, subject: 'Recomendacion: ${item.title}');
   }
 }
