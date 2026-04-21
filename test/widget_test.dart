@@ -8,7 +8,6 @@ import 'package:tapp/pages/detail.dart';
 import 'package:tapp/pages/home.dart';
 import 'package:tapp/pages/main_page.dart';
 import 'package:tapp/pages/profile.dart';
-import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
 import 'package:tapp/providers/theme_provider.dart';
 import 'package:tapp/theme/app_theme.dart';
@@ -17,18 +16,15 @@ void main() {
   Future<void> pumpWithProviders(
     WidgetTester tester, {
     required Widget home,
-    AuthProvider? authProvider,
     LikesProvider? likesProvider,
     ThemeProvider? themeProvider,
   }) async {
-    final auth = authProvider ?? AuthProvider();
     final likes = likesProvider ?? LikesProvider();
     final theme = themeProvider ?? ThemeProvider();
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<AuthProvider>.value(value: auth),
           ChangeNotifierProvider<LikesProvider>.value(value: likes),
           ChangeNotifierProvider<ThemeProvider>.value(value: theme),
         ],
@@ -175,21 +171,12 @@ void main() {
     );
   });
 
-  testWidgets('Profile header shows user info from login provider', (
-    WidgetTester tester,
-  ) async {
-    final authProvider = AuthProvider()..login('ana@example.com');
-
-    await pumpWithProviders(
-      tester,
-      home: const ProfilePage(),
-      authProvider: authProvider,
-    );
-
+  testWidgets('Profile header shows fallback user info', (WidgetTester tester) async {
+    await pumpWithProviders(tester, home: const ProfilePage());
     expect(find.byKey(const Key('profile_user_handle')), findsOneWidget);
-    expect(find.text('@ana'), findsOneWidget);
+    expect(find.text('@usuario_demo'), findsOneWidget);
     expect(find.byKey(const Key('profile_user_followers')), findsOneWidget);
-    expect(find.textContaining('siguen esta cuenta'), findsOneWidget);
+    expect(find.text('0 siguen esta cuenta'), findsOneWidget);
   });
 
   testWidgets('MainPage keeps transparent overlay navigation bar', (
@@ -287,14 +274,11 @@ void main() {
   });
 
   testWidgets(
-    'ConfigPage logout logs user out and pops back to root for auth redirect',
+    'ConfigPage logout pops back to previous route',
     (WidgetTester tester) async {
-      final authProvider = AuthProvider()..login('demo@tapp.app');
-
       await tester.pumpWidget(
         MultiProvider(
           providers: [
-            ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
             ChangeNotifierProvider<LikesProvider>.value(value: LikesProvider()),
             ChangeNotifierProvider<ThemeProvider>.value(value: ThemeProvider()),
           ],
@@ -324,12 +308,10 @@ void main() {
       await tester.tap(find.text('open_config'));
       await tester.pumpAndSettle();
       expect(find.byType(ConfigPage), findsOneWidget);
-      expect(authProvider.isLoggedIn, true);
 
       await tester.tap(find.byKey(const Key('config_logout_tile')));
       await tester.pumpAndSettle();
 
-      expect(authProvider.isLoggedIn, false);
       expect(find.text('open_config'), findsOneWidget);
       expect(find.byType(ConfigPage), findsNothing);
     },
