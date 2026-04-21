@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tapp/pages/login_page.dart';
-import 'package:tapp/pages/main_page.dart';
-import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
 import 'package:tapp/providers/theme_provider.dart';
 import 'package:tapp/theme/app_theme.dart';
+import 'package:tapp/pages/auth_gate.dart';
+import 'package:tapp/firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => LikesProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
@@ -25,7 +28,6 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
     final themeProvider = context.watch<ThemeProvider>();
 
     return MaterialApp(
@@ -33,7 +35,7 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: themeProvider.themeMode,
-      home: authProvider.isLoggedIn ? const MainPage() : const LoginPage(),
+      home: AuthGate(),
     );
   }
 }

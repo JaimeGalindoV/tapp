@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/providers/theme_provider.dart';
 import 'package:tapp/theme/app_colors.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ConfigPage extends StatelessWidget {
   const ConfigPage({super.key});
@@ -89,9 +89,11 @@ class ConfigPage extends StatelessWidget {
                     Icons.chevron_right_rounded,
                     color: colorScheme.onSurfaceVariant,
                   ),
-                  onTap: () {
-                    context.read<AuthProvider>().logout();
-                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  onTap: () async {
+                    await FirebaseAuth.instance.signOut();
+                    if (context.mounted) {
+                      Navigator.of(context).pop();
+                    }
                   },
                 ),
               ),

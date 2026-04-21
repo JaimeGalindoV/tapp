@@ -1,10 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tapp/data/swipe_content_data.dart';
 import 'package:tapp/models/app_user_profile.dart';
 import 'package:tapp/models/swipe_content_item.dart';
 import 'package:tapp/pages/detail.dart';
-import 'package:tapp/providers/auth_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
 
@@ -23,9 +23,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final likesProvider = context.watch<LikesProvider>();
-    final authProvider = context.watch<AuthProvider>();
     final colorScheme = Theme.of(context).colorScheme;
-    final userProfile = authProvider.currentUser ?? _fallbackUserProfile();
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final bottomScrollPadding = bottomInset + 100;
     final items = _buildVisibleItems(likesProvider);
@@ -36,89 +34,96 @@ class _ProfilePageState extends State<ProfilePage> {
         .where((item) => item.type == ContentType.movie)
         .toList(growable: false);
 
-    return Scaffold(
-      appBar: const CustomAppBar(title: 'Profile'),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-              colorScheme.surface,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, bottomScrollPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ProfileHeader(userProfile: userProfile),
-                const SizedBox(height: 20),
-                _ProfileActionRow(
-                  isContentVisible: _isContentVisible,
-                  favoritesOnly: _favoritesOnly,
-                  sortNewestFirst: _sortNewestFirst,
-                  onToggleContentVisible: () {
-                    setState(() {
-                      _isContentVisible = !_isContentVisible;
-                    });
-                  },
-                  onToggleFavoritesOnly: () {
-                    setState(() {
-                      _favoritesOnly = !_favoritesOnly;
-                    });
-                  },
-                  onToggleOrder: () {
-                    setState(() {
-                      _sortNewestFirst = !_sortNewestFirst;
-                    });
-                  },
-                ),
-                const SizedBox(height: 26),
-                if (!_isContentVisible)
-                  Container(
-                    key: const Key('profile_content_hidden_placeholder'),
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: colorScheme.outlineVariant),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      'Contenido oculto',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  )
-                else ...[
-                  _ContentSection(
-                    title: 'Series',
-                    items: seriesItems,
-                    emptyLabel: _favoritesOnly
-                        ? 'No likes yet in Series'
-                        : 'No Series available',
-                  ),
-                  const SizedBox(height: 22),
-                  _ContentSection(
-                    title: 'Peliculas',
-                    items: movieItems,
-                    emptyLabel: _favoritesOnly
-                        ? 'No likes yet in Peliculas'
-                        : 'No Peliculas available',
-                  ),
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
+      builder: (context, snapshot) {
+        final userProfile = _buildUserProfile(snapshot.data);
+        return Scaffold(
+          appBar: const CustomAppBar(title: 'Profile'),
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                  colorScheme.surface,
                 ],
-              ],
+              ),
+            ),
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(16, 10, 16, bottomScrollPadding),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ProfileHeader(userProfile: userProfile),
+                    const SizedBox(height: 20),
+                    _ProfileActionRow(
+                      isContentVisible: _isContentVisible,
+                      favoritesOnly: _favoritesOnly,
+                      sortNewestFirst: _sortNewestFirst,
+                      onToggleContentVisible: () {
+                        setState(() {
+                          _isContentVisible = !_isContentVisible;
+                        });
+                      },
+                      onToggleFavoritesOnly: () {
+                        setState(() {
+                          _favoritesOnly = !_favoritesOnly;
+                        });
+                      },
+                      onToggleOrder: () {
+                        setState(() {
+                          _sortNewestFirst = !_sortNewestFirst;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 26),
+                    if (!_isContentVisible)
+                      Container(
+                        key: const Key('profile_content_hidden_placeholder'),
+                        height: 200,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: colorScheme.outlineVariant),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Contenido oculto',
+                          style: TextStyle(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      )
+                    else ...[
+                      _ContentSection(
+                        title: 'Series',
+                        items: seriesItems,
+                        emptyLabel: _favoritesOnly
+                            ? 'No likes yet in Series'
+                            : 'No Series available',
+                      ),
+                      const SizedBox(height: 22),
+                      _ContentSection(
+                        title: 'Peliculas',
+                        items: movieItems,
+                        emptyLabel: _favoritesOnly
+                            ? 'No likes yet in Peliculas'
+                            : 'No Peliculas available',
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -139,6 +144,37 @@ class _ProfilePageState extends State<ProfilePage> {
       email: 'demo@tapp.app',
       handle: '@usuario_demo',
       followersLabel: '0 siguen esta cuenta',
+    );
+  }
+
+  AppUserProfile _buildUserProfile(User? user) {
+    if (user == null) {
+      return _fallbackUserProfile();
+    }
+
+    final normalizedEmail = (user.email ?? '').trim().toLowerCase();
+    final fallbackName = normalizedEmail.contains('@')
+        ? normalizedEmail.split('@').first
+        : normalizedEmail;
+    final displayName = (user.displayName ?? '').trim();
+    final sourceName = displayName.isNotEmpty
+        ? user.displayName!.trim()
+        : fallbackName;
+    final name = sourceName.isEmpty ? 'usuario_demo' : sourceName;
+
+    final hashSeed = normalizedEmail.isNotEmpty ? normalizedEmail : name;
+    final hash = hashSeed.codeUnits.fold<int>(0, (sum, code) {
+      return (sum + code) % 1900000;
+    });
+    final followers = 100000 + hash;
+    final followersText = followers >= 1000000
+        ? '${(followers / 1000000).toStringAsFixed(1)} M'
+        : '${(followers / 1000).toStringAsFixed(1)} K';
+
+    return AppUserProfile(
+      email: normalizedEmail.isEmpty ? 'demo@tapp.app' : normalizedEmail,
+      handle: name,
+      followersLabel: '$followersText siguen esta cuenta',
     );
   }
 }
