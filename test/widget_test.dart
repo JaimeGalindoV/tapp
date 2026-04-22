@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:tapp/data/swipe_content_data.dart';
 import 'package:tapp/pages/config_page.dart';
 import 'package:tapp/pages/detail.dart';
+import 'package:tapp/pages/edit_profile_page.dart';
 import 'package:tapp/pages/home.dart';
 import 'package:tapp/pages/main_page.dart';
 import 'package:tapp/pages/profile.dart';
@@ -173,6 +174,7 @@ void main() {
 
   testWidgets('Profile header shows fallback user info', (WidgetTester tester) async {
     await pumpWithProviders(tester, home: const ProfilePage());
+    expect(find.byKey(const Key('profile_user_avatar')), findsOneWidget);
     expect(find.byKey(const Key('profile_user_handle')), findsOneWidget);
     expect(find.text('@usuario_demo'), findsOneWidget);
     expect(find.byKey(const Key('profile_user_followers')), findsOneWidget);
@@ -263,6 +265,8 @@ void main() {
     );
 
     expect(find.byKey(const Key('config_theme_switch_tile')), findsOneWidget);
+    expect(find.byKey(const Key('config_edit_profile_tile')), findsOneWidget);
+    expect(find.text('Editar perfil'), findsOneWidget);
     expect(themeProvider.isDarkMode, true);
     expect(find.text('Activado'), findsOneWidget);
 
@@ -271,6 +275,85 @@ void main() {
 
     expect(themeProvider.isDarkMode, false);
     expect(find.text('Desactivado'), findsOneWidget);
+  });
+
+  testWidgets('ConfigPage opens EditProfilePage from edit profile option', (
+    WidgetTester tester,
+  ) async {
+    await pumpWithProviders(tester, home: const ConfigPage());
+
+    await tester.tap(find.byKey(const Key('config_edit_profile_tile')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(EditProfilePage), findsOneWidget);
+    expect(find.text('Editar perfil'), findsOneWidget);
+    expect(find.byKey(const Key('config_email_text')), findsOneWidget);
+    expect(find.byKey(const Key('config_display_name_field')), findsOneWidget);
+    expect(find.byKey(const Key('config_photo_url_field')), findsOneWidget);
+    expect(
+      find.byKey(const Key('config_change_password_button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('config_save_profile_button')), findsOneWidget);
+  });
+
+  testWidgets('EditProfilePage opens change password dialog', (
+    WidgetTester tester,
+  ) async {
+    await pumpWithProviders(tester, home: const EditProfilePage());
+
+    await tester.tap(find.byKey(const Key('config_change_password_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cambiar contraseña'), findsWidgets);
+    expect(
+      find.byKey(const Key('change_password_current_field')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('change_password_new_field')), findsOneWidget);
+    expect(
+      find.byKey(const Key('change_password_repeat_field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('change_password_submit_button')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('EditProfilePage keeps dialog open when passwords do not match', (
+    WidgetTester tester,
+  ) async {
+    await pumpWithProviders(tester, home: const EditProfilePage());
+
+    await tester.tap(find.byKey(const Key('config_change_password_button')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('change_password_current_field')),
+      'actual123',
+    );
+    await tester.enterText(
+      find.byKey(const Key('change_password_new_field')),
+      'nueva123',
+    );
+    await tester.enterText(
+      find.byKey(const Key('change_password_repeat_field')),
+      'distinta123',
+    );
+    await tester.tap(find.byKey(const Key('change_password_submit_button')));
+    await tester.pump();
+
+    expect(find.text('Las contraseñas no coinciden.'), findsOneWidget);
+    expect(
+      find.byKey(const Key('change_password_current_field')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('change_password_new_field')), findsOneWidget);
+    expect(
+      find.byKey(const Key('change_password_repeat_field')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
