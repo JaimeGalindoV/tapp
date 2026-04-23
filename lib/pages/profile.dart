@@ -33,10 +33,11 @@ class _ProfilePageState extends State<ProfilePage> {
     final movieItems = items
         .where((item) => item.type == ContentType.movie)
         .toList(growable: false);
+    final auth = _authInstance;
 
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      initialData: FirebaseAuth.instance.currentUser,
+      stream: auth?.userChanges() ?? Stream<User?>.value(null),
+      initialData: auth?.currentUser,
       builder: (context, snapshot) {
         final userProfile = _buildUserProfile(snapshot.data);
         return Scaffold(
@@ -139,10 +140,19 @@ class _ProfilePageState extends State<ProfilePage> {
     return sourceItems.reversed.toList(growable: false);
   }
 
+  FirebaseAuth? get _authInstance {
+    try {
+      return FirebaseAuth.instance;
+    } catch (_) {
+      return null;
+    }
+  }
+
   AppUserProfile _fallbackUserProfile() {
     return const AppUserProfile(
       email: 'demo@tapp.app',
       handle: '@usuario_demo',
+      photoUrl: null,
       followersLabel: '0 siguen esta cuenta',
     );
   }
@@ -174,6 +184,9 @@ class _ProfilePageState extends State<ProfilePage> {
     return AppUserProfile(
       email: normalizedEmail.isEmpty ? 'demo@tapp.app' : normalizedEmail,
       handle: name,
+      photoUrl: (user.photoURL ?? '').trim().isEmpty
+          ? null
+          : user.photoURL!.trim(),
       followersLabel: '$followersText siguen esta cuenta',
     );
   }
@@ -187,28 +200,10 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Row(
       children: [
-        Container(
-          width: 52,
-          height: 52,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: colorScheme.surfaceContainer,
-            border: Border.all(color: colorScheme.outlineVariant),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Image.asset(
-              isDarkMode
-                  ? 'assets/images/LogoShortWhite.png'
-                  : 'assets/images/LogoShortBlack.png',
-              fit: BoxFit.contain,
-            ),
-          ),
-        ),
+        _ProfileAvatar(photoUrl: userProfile.photoUrl),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -230,6 +225,59 @@ class _ProfileHeader extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({required this.photoUrl});
+
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final imageUrl = (photoUrl ?? '').trim();
+
+    return Container(
+      key: const Key('profile_user_avatar'),
+      width: 52,
+      height: 52,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: colorScheme.surfaceContainer,
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: imageUrl.isEmpty
+          ? _ProfileLogoAvatar(isDarkMode: isDarkMode)
+          : Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) {
+                return _ProfileLogoAvatar(isDarkMode: isDarkMode);
+              },
+            ),
+    );
+  }
+}
+
+class _ProfileLogoAvatar extends StatelessWidget {
+  const _ProfileLogoAvatar({required this.isDarkMode});
+
+  final bool isDarkMode;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Image.asset(
+        isDarkMode
+            ? 'assets/images/LogoShortWhite.png'
+            : 'assets/images/LogoShortBlack.png',
+        fit: BoxFit.contain,
+      ),
     );
   }
 }
