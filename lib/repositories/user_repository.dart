@@ -1,35 +1,28 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:gallery_saver_plus/gallery_saver.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:tapp/models/app_user_profile.dart';
+import 'package:tapp/services/profile_photo_store.dart';
 
 class UserRepository {
-  UserRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+  UserRepository({
+    FirebaseFirestore? firestore,
+    ProfilePhotoStore? photoStore,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _photoStore = photoStore ?? createProfilePhotoStore();
 
   final FirebaseFirestore _firestore;
+  final ProfilePhotoStore _photoStore;
 
   CollectionReference<Map<String, dynamic>> get _usersCollection =>
       _firestore.collection('users');
 
+  bool get supportsLocalFileImages => _photoStore.supportsLocalFileImages;
+
   Future<String?> saveCapturedPhotoToSystemGallery(XFile pickedFile) async {
-    final sourcePath = pickedFile.path.trim();
-    if (sourcePath.isEmpty) {
-      return null;
-    }
-
-    final saved = await GallerySaver.saveImage(sourcePath);
-    if (saved != true) {
-      return null;
-    }
-
-    return sourcePath;
+    return _photoStore.saveCapturedPhotoToSystemGallery(pickedFile);
   }
 
   Future<String?> getDeviceToken() async {
@@ -65,13 +58,16 @@ class UserRepository {
         'email': email,
         'displayName': displayName,
         'authPhotoUrl': (user.photoURL ?? '').trim(),
-        'deviceToken': (deviceToken ?? '').trim(),
         'providerIds': user.providerData
             .map((provider) => provider.providerId.trim())
             .where((providerId) => providerId.isNotEmpty)
             .toList(growable: false),
         'updatedAt': FieldValue.serverTimestamp(),
       };
+      final normalizedToken = (deviceToken ?? '').trim();
+      if (normalizedToken.isNotEmpty) {
+        payload['deviceToken'] = normalizedToken;
+      }
       if (!snapshot.exists) {
         payload['createdAt'] = FieldValue.serverTimestamp();
       }
@@ -147,58 +143,11 @@ class UserRepository {
     required String uid,
     required XFile pickedFile,
   }) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final files = directory.listSync();
-    final legacyPrefix = 'profile_$uid.';
-    final versionedPrefix = 'profile_${uid}_';
-    for (final entity in files) {
-      if (entity is! File) {
-        continue;
-      }
-      final name = entity.uri.pathSegments.last;
-      if (name.startsWith(legacyPrefix) || name.startsWith(versionedPrefix)) {
-        await entity.delete();
-      }
-    }
-
-    final extension = _extractExtension(pickedFile.path);
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final target = File(
-      '${directory.path}${Platform.pathSeparator}profile_${uid}_$timestamp$extension',
-    );
-    final bytes = await pickedFile.readAsBytes();
-    if (bytes.isEmpty) {
-      return null;
-    }
-
-    final storedFile = await target.writeAsBytes(bytes, flush: true);
-    return storedFile.path;
+    return _photoStore.saveProfilePhoto(uid: uid, pickedFile: pickedFile);
   }
 
   Future<String?> loadLocalProfilePhoto(String uid) async {
-    final directory = await getApplicationDocumentsDirectory();
-    final legacyPrefix = 'profile_$uid.';
-    final versionedPrefix = 'profile_${uid}_';
-    final matchingFiles = directory
-        .listSync()
-        .whereType<File>()
-        .where((file) {
-          final name = file.uri.pathSegments.last;
-          return name.startsWith(legacyPrefix) || name.startsWith(versionedPrefix);
-        })
-        .toList(growable: false);
-
-    if (matchingFiles.isEmpty) {
-      return null;
-    }
-
-    matchingFiles.sort((a, b) {
-      final modifiedA = a.lastModifiedSync();
-      final modifiedB = b.lastModifiedSync();
-      return modifiedB.compareTo(modifiedA);
-    });
-
-    return matchingFiles.first.path;
+    return _photoStore.loadProfilePhotoPath(uid);
   }
 
   String _resolveDisplayName(User user) {
@@ -216,13 +165,5 @@ class UserRepository {
 
   String? _nullableString(String value) {
     return value.isEmpty ? null : value;
-  }
-
-  String _extractExtension(String path) {
-    final dotIndex = path.lastIndexOf('.');
-    if (dotIndex == -1) {
-      return '.jpg';
-    }
-    return path.substring(dotIndex);
   }
 }

@@ -33,14 +33,20 @@ class ReviewsRepository {
     required User user,
     required String text,
   }) {
-    final review = UserReview(
-      userId: user.uid,
-      userDisplayName: _resolveDisplayName(user),
-      text: text.trim(),
-    );
-    return _reviewsCollection(
-      contentId,
-    ).doc(user.uid).set(review.toFirestore(), SetOptions(merge: true));
+    final reference = _reviewsCollection(contentId).doc(user.uid);
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      final payload = <String, dynamic>{
+        'userId': user.uid,
+        'userDisplayName': _resolveDisplayName(user),
+        'text': text.trim(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (!snapshot.exists || snapshot.data()?['createdAt'] == null) {
+        payload['createdAt'] = FieldValue.serverTimestamp();
+      }
+      transaction.set(reference, payload, SetOptions(merge: true));
+    });
   }
 
   Future<void> deleteReview({
@@ -54,8 +60,9 @@ class ReviewsRepository {
     final snapshot = await _firestore
         .collectionGroup('reviews')
         .where('userId', isEqualTo: userId)
+        .count()
         .get();
-    return snapshot.docs.length;
+    return snapshot.count ?? 0;
   }
 
   Stream<int> watchUserReviewCount(String userId) {

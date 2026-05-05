@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:tapp/providers/user_profile_provider.dart';
 import 'package:tapp/repositories/user_repository.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
+import 'package:tapp/widgets/platform_profile_image.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -67,7 +66,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       });
     } catch (_) {
       if (mounted) {
-        _showMessage('No se pudo abrir la galeria.');
+        _showMessage('No se pudo abrir la galería.');
       }
     }
   }
@@ -81,7 +80,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       final cameraStatus = await Permission.camera.request();
       if (!cameraStatus.isGranted) {
         if (mounted) {
-          _showMessage('Permiso de camara denegado.');
+          _showMessage('Permiso de cámara denegado.');
         }
         return;
       }
@@ -99,7 +98,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
       );
       if (storedPath == null || !mounted) {
         if (mounted) {
-          _showMessage('No se pudo guardar la foto en tu galeria.');
+          _showMessage('No se pudo guardar la foto en tu galería.');
         }
         return;
       }
@@ -108,7 +107,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         _selectedPhoto = pickedFile;
       });
       _showMessage(
-        'Foto guardada en tu galeria. Ya puedes verla desde seleccionar desde galeria.',
+        'Foto guardada en tu galería. Ya puedes verla desde seleccionar desde galería.',
       );
     } catch (_) {
       if (mounted) {
@@ -126,7 +125,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
   Future<void> _saveProfile() async {
     final user = _currentUser;
     if (user == null) {
-      _showMessage('No hay una sesion activa.');
+      _showMessage('No hay una sesión activa.');
       return;
     }
 
@@ -228,7 +227,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                       key: const Key('config_pick_profile_photo_button'),
                       onPressed: _pickPhoto,
                       icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Seleccionar desde galeria'),
+                      label: const Text('Seleccionar desde galería'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -321,40 +320,11 @@ class _EditableProfileAvatar extends StatelessWidget {
       ),
       child: imageUrl.isEmpty
           ? _LogoAvatar(isDarkMode: isDarkMode)
-          : _AvatarImage(photoUrl: imageUrl, isDarkMode: isDarkMode),
-    );
-  }
-}
-
-class _AvatarImage extends StatelessWidget {
-  const _AvatarImage({required this.photoUrl, required this.isDarkMode});
-
-  final String photoUrl;
-  final bool isDarkMode;
-
-  @override
-  Widget build(BuildContext context) {
-    if (photoUrl.startsWith('http')) {
-      return Image.network(
-        photoUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return _LogoAvatar(isDarkMode: isDarkMode);
-        },
-      );
-    }
-
-    final file = File(photoUrl);
-    if (!file.existsSync()) {
-      return _LogoAvatar(isDarkMode: isDarkMode);
-    }
-
-    return Image.file(
-      file,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        return _LogoAvatar(isDarkMode: isDarkMode);
-      },
+          : PlatformProfileImage(
+              photoUrl: imageUrl,
+              fit: BoxFit.cover,
+              fallback: _LogoAvatar(isDarkMode: isDarkMode),
+            ),
     );
   }
 }
@@ -420,7 +390,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
     final user = widget.currentUser;
     if (user == null) {
-      widget.onMessage('No hay una sesion activa.');
+      widget.onMessage('No hay una sesión activa.');
       return;
     }
 

@@ -264,7 +264,7 @@ class _HomePageState extends State<HomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               const Text(
-                'No se pudo cargar el catalogo.',
+                'No se pudo cargar el catálogo.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),

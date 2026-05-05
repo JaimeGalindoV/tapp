@@ -22,12 +22,15 @@ class _DetailPageState extends State<DetailPage> {
   late final TextEditingController _reviewController;
   bool _isSaving = false;
   bool _isDeleting = false;
-  String? _loadedReviewForUserId;
+  bool _hasLocalReviewDraft = false;
+  bool _isApplyingSyncedReviewText = false;
+  String _lastSyncedReviewText = '';
 
   @override
   void initState() {
     super.initState();
     _reviewController = TextEditingController();
+    _reviewController.addListener(_handleReviewTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ContentProvider>().ensureContentAvailable(widget.contentId);
       _loadCurrentUserReview();
@@ -36,8 +39,29 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   void dispose() {
+    _reviewController.removeListener(_handleReviewTextChanged);
     _reviewController.dispose();
     super.dispose();
+  }
+
+  void _handleReviewTextChanged() {
+    if (_isApplyingSyncedReviewText) {
+      return;
+    }
+    _hasLocalReviewDraft =
+        _reviewController.text.trim() != _lastSyncedReviewText.trim();
+  }
+
+  void _applySyncedReviewText(String text) {
+    _isApplyingSyncedReviewText = true;
+    _reviewController.value = _reviewController.value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+      composing: TextRange.empty,
+    );
+    _lastSyncedReviewText = text;
+    _hasLocalReviewDraft = false;
+    _isApplyingSyncedReviewText = false;
   }
 
   Future<void> _loadCurrentUserReview() async {
@@ -46,17 +70,20 @@ class _DetailPageState extends State<DetailPage> {
       return;
     }
 
-    final review = await context
-        .read<ReviewsProvider>()
-        .getUserReviewForContent(contentId: widget.contentId, userId: user.uid);
-    if (!mounted) {
-      return;
+    try {
+      final review = await context.read<ReviewsProvider>().getUserReviewForContent(
+        contentId: widget.contentId,
+        userId: user.uid,
+      );
+      if (!mounted) {
+        return;
+      }
+      _applySyncedReviewText(review?.text ?? '');
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo cargar tu reseña actual.');
+      }
     }
-
-    setState(() {
-      _loadedReviewForUserId = user.uid;
-      _reviewController.text = review?.text ?? '';
-    });
   }
 
   Future<void> _saveReview(User user) async {
@@ -76,6 +103,7 @@ class _DetailPageState extends State<DetailPage> {
         user: user,
         text: text,
       );
+      _applySyncedReviewText(text);
       if (!mounted) {
         return;
       }
@@ -89,7 +117,6 @@ class _DetailPageState extends State<DetailPage> {
       if (mounted) {
         setState(() {
           _isSaving = false;
-          _loadedReviewForUserId = user.uid;
         });
       }
     }
@@ -108,7 +135,7 @@ class _DetailPageState extends State<DetailPage> {
       if (!mounted) {
         return;
       }
-      _reviewController.clear();
+      _applySyncedReviewText('');
       await context.read<UserProfileProvider>().refreshStats(user);
       _showMessage('Reseña eliminada.');
     } catch (_) {
@@ -119,7 +146,6 @@ class _DetailPageState extends State<DetailPage> {
       if (mounted) {
         setState(() {
           _isDeleting = false;
-          _loadedReviewForUserId = user.uid;
         });
       }
     }
@@ -133,41 +159,58 @@ class _DetailPageState extends State<DetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final item = context.watch<ContentProvider>().getById(widget.contentId);
+    final contentProvider = context.watch<ContentProvider>();
+    final item = contentProvider.getById(widget.contentId);
     if (item == null) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return _buildMissingContentState(context, contentProvider);
     }
 
     final reviewsProvider = context.watch<ReviewsProvider>();
     return StreamBuilder<List<UserReview>>(
       stream: reviewsProvider.watchReviews(widget.contentId),
       builder: (context, snapshot) {
+        final reviewsError = snapshot.hasError
+            ? 'No se pudieron cargar las reseñas.'
+            : null;
+        final isLoadingReviews =
+            snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData;
         final reviews = snapshot.data ?? const <UserReview>[];
-        _syncCurrentUserText(reviews);
-        return _buildScaffold(context, item, reviews);
+        if (reviewsError == null) {
+          _syncCurrentUserText(reviews);
+        }
+        return _buildScaffold(
+          context,
+          item,
+          reviews,
+          reviewsError: reviewsError,
+          isLoadingReviews: isLoadingReviews,
+        );
       },
     );
   }
 
   void _syncCurrentUserText(List<UserReview> reviews) {
     final user = _currentUserSafe;
-    if (user == null || _loadedReviewForUserId == user.uid) {
+    if (user == null || _hasLocalReviewDraft) {
       return;
     }
 
-    for (final review in reviews) {
-      if (review.userId == user.uid) {
-        _reviewController.text = review.text;
-        _loadedReviewForUserId = user.uid;
-        return;
-      }
+    final currentUserReview = _findCurrentUserReview(reviews, user.uid);
+    final remoteText = currentUserReview?.text ?? '';
+    if (_lastSyncedReviewText == remoteText &&
+        _reviewController.text == remoteText) {
+      return;
     }
+
+    _applySyncedReviewText(remoteText);
   }
 
   Widget _buildScaffold(
     BuildContext context,
     SwipeContentItem item,
     List<UserReview> reviews,
+    {String? reviewsError, bool isLoadingReviews = false}
   ) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -253,7 +296,7 @@ class _DetailPageState extends State<DetailPage> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          '${item.type == ContentType.movie ? 'Pelicula' : 'Serie'} | ${item.year} | ${item.genres.join(' | ')}',
+                          '${item.type == ContentType.movie ? 'Película' : 'Serie'} | ${item.year} | ${item.genres.join(' | ')}',
                           style: TextStyle(
                             color: isDarkMode
                                 ? Colors.white70
@@ -311,7 +354,11 @@ class _DetailPageState extends State<DetailPage> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        reviews.length.toString(),
+                        reviewsError != null
+                            ? '!'
+                            : (isLoadingReviews
+                                  ? '...'
+                                  : reviews.length.toString()),
                         style: TextStyle(
                           color: colorScheme.onSurfaceVariant,
                           fontSize: 22,
@@ -459,7 +506,26 @@ class _DetailPageState extends State<DetailPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  if (reviews.isEmpty)
+                  if (reviewsError != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: colorScheme.outlineVariant),
+                      ),
+                      child: Text(
+                        reviewsError,
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    )
+                  else if (isLoadingReviews && reviews.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (reviews.isEmpty)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -519,17 +585,62 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
+  Widget _buildMissingContentState(
+    BuildContext context,
+    ContentProvider contentProvider,
+  ) {
+    if (contentProvider.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final message = (contentProvider.errorMessage ?? '').trim();
+    final resolvedMessage = message.isNotEmpty
+        ? message
+        : 'No se pudo cargar este contenido o ya no está disponible.';
+
+    return Scaffold(
+      appBar: const CustomAppBar(
+        showBackButton: true,
+        logoCentered: true,
+        showConfigButton: true,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                resolvedMessage,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () {
+                  context.read<ContentProvider>().ensureContentAvailable(
+                    widget.contentId,
+                  );
+                },
+                child: const Text('Intentar de nuevo'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _shareContent(SwipeContentItem item) async {
-    final typeLabel = item.type == ContentType.movie ? 'pelicula' : 'serie';
+    final typeLabel = item.type == ContentType.movie ? 'película' : 'serie';
     final message =
         'Te recomiendo $typeLabel: ${item.title} (${item.year})\n'
-        'Generos: ${item.genres.join(', ')}\n'
+        'Géneros: ${item.genres.join(', ')}\n'
         'Calificacion: ${item.rating.toStringAsFixed(1)}\n'
         'Disponible en: ${item.providers.join(', ')}\n\n'
         'Visto en Tapp.';
 
     await SharePlus.instance.share(
-      ShareParams(text: message, subject: 'Recomendacion: ${item.title}'),
+      ShareParams(text: message, subject: 'Recomendación: ${item.title}'),
     );
   }
 

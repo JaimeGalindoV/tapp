@@ -26,6 +26,8 @@ class LikesProvider extends ChangeNotifier {
 
     await _subscription?.cancel();
     _uid = uid;
+    _likedContentIds = const <String>[];
+    notifyListeners();
     _subscription = _repository.watchLikedContentIds(uid).listen((likedIds) {
       _likedContentIds = likedIds;
       notifyListeners();

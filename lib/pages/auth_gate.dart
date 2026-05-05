@@ -4,7 +4,6 @@ import 'package:firebase_ui_oauth_google/firebase_ui_oauth_google.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tapp/pages/main_page.dart';
-import 'package:tapp/providers/content_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
 import 'package:tapp/providers/user_profile_provider.dart';
 
@@ -105,14 +104,10 @@ class _AuthenticatedRootState extends State<_AuthenticatedRoot> {
 
   Future<void> _bootstrap() async {
     final likesProvider = context.read<LikesProvider>();
-    final contentProvider = context.read<ContentProvider>();
     final userProfileProvider = context.read<UserProfileProvider>();
 
     await likesProvider.bindUser(widget.user.uid);
-    await Future.wait(<Future<void>>[
-      contentProvider.loadContent(),
-      userProfileProvider.bindUser(widget.user),
-    ]);
+    await userProfileProvider.bindUser(widget.user);
   }
 
   @override

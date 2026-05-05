@@ -213,7 +213,9 @@ class UserProfileProvider extends ChangeNotifier {
       final reloadedPhotoPath = await _userRepository.loadLocalProfilePhoto(
         user.uid,
       );
-      _profile = savedProfile.copyWith(localPhotoPath: reloadedPhotoPath);
+      if (reloadedPhotoPath != null || _userRepository.supportsLocalFileImages) {
+        _profile = savedProfile.copyWith(localPhotoPath: reloadedPhotoPath);
+      }
       _errorMessage = null;
     } catch (error) {
       _errorMessage = error.toString();

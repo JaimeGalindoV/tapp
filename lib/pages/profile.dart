@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +8,7 @@ import 'package:tapp/providers/content_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
 import 'package:tapp/providers/user_profile_provider.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
+import 'package:tapp/widgets/platform_profile_image.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -115,11 +114,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 22),
                     _ContentSection(
-                      title: 'Peliculas',
+                      title: 'Películas',
                       items: movieItems,
                       emptyLabel: _favoritesOnly
-                          ? 'No tienes peliculas favoritas todavía'
-                          : 'No hay peliculas disponibles',
+                          ? 'No tienes películas favoritas todavía'
+                          : 'No hay películas disponibles',
                     ),
                   ],
                 ],
@@ -237,40 +236,11 @@ class _ProfileAvatar extends StatelessWidget {
       ),
       child: imageUrl.isEmpty
           ? _ProfileLogoAvatar(isDarkMode: isDarkMode)
-          : _ProfileImage(photoUrl: imageUrl, isDarkMode: isDarkMode),
-    );
-  }
-}
-
-class _ProfileImage extends StatelessWidget {
-  const _ProfileImage({required this.photoUrl, required this.isDarkMode});
-
-  final String photoUrl;
-  final bool isDarkMode;
-
-  @override
-  Widget build(BuildContext context) {
-    if (photoUrl.startsWith('http')) {
-      return Image.network(
-        photoUrl,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return _ProfileLogoAvatar(isDarkMode: isDarkMode);
-        },
-      );
-    }
-
-    final file = File(photoUrl);
-    if (!file.existsSync()) {
-      return _ProfileLogoAvatar(isDarkMode: isDarkMode);
-    }
-
-    return Image.file(
-      file,
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) {
-        return _ProfileLogoAvatar(isDarkMode: isDarkMode);
-      },
+          : PlatformProfileImage(
+              photoUrl: imageUrl,
+              fit: BoxFit.cover,
+              fallback: _ProfileLogoAvatar(isDarkMode: isDarkMode),
+            ),
     );
   }
 }

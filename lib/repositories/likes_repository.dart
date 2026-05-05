@@ -34,7 +34,7 @@ class LikesRepository {
   }
 
   Future<int> countLikes(String uid) async {
-    final snapshot = await _likesCollection(uid).get();
-    return snapshot.docs.length;
+    final snapshot = await _likesCollection(uid).count().get();
+    return snapshot.count ?? 0;
   }
 }
