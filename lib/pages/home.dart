@@ -4,9 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:provider/provider.dart';
-import 'package:tapp/data/swipe_content_data.dart';
 import 'package:tapp/models/swipe_content_item.dart';
 import 'package:tapp/pages/detail.dart';
+import 'package:tapp/providers/content_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
 import 'package:tapp/theme/app_colors.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
@@ -57,12 +57,22 @@ class _HomePageState extends State<HomePage> {
   }
 
   bool _handleSwipe(
+    List<SwipeContentItem> items,
     int previousIndex,
     int? currentIndex,
     CardSwiperDirection direction,
   ) {
+    if (previousIndex >= items.length) {
+      return false;
+    }
+
+    final likesProvider = context.read<LikesProvider>();
+    final item = items[previousIndex];
     if (direction.isCloseTo(CardSwiperDirection.right)) {
-      context.read<LikesProvider>().addLike(swipeContentItems[previousIndex]);
+      likesProvider.addLike(item);
+    } else if (direction.isCloseTo(CardSwiperDirection.left) &&
+        likesProvider.isLiked(item.id)) {
+      likesProvider.removeLike(item.id);
     }
 
     final nextType = direction.isCloseTo(CardSwiperDirection.right)
@@ -72,7 +82,6 @@ class _HomePageState extends State<HomePage> {
         : _SwipeFeedbackType.none;
 
     _showSwipeFeedback(nextType);
-
     return true;
   }
 
@@ -97,7 +106,7 @@ class _HomePageState extends State<HomePage> {
       },
       child: Stack(
         fit: StackFit.expand,
-        children: [
+        children: <Widget>[
           Image.network(
             movie.posterUrl,
             fit: BoxFit.cover,
@@ -107,7 +116,7 @@ class _HomePageState extends State<HomePage> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFF2C2C2C), Color(0xFF131313)],
+                    colors: <Color>[Color(0xFF2C2C2C), Color(0xFF131313)],
                   ),
                 ),
               );
@@ -119,17 +128,17 @@ class _HomePageState extends State<HomePage> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: isDarkMode
-                    ? const [
+                    ? const <Color>[
                         Color(0x66000000),
                         Colors.transparent,
                         Color(0xCC000000),
                       ]
-                    : const [
+                    : const <Color>[
                         Color(0x38000000),
                         Color(0x10000000),
                         Color(0xD9000000),
                       ],
-                stops: [0.0, 0.46, 1.0],
+                stops: const <double>[0, 0.46, 1],
               ),
             ),
           ),
@@ -139,7 +148,7 @@ class _HomePageState extends State<HomePage> {
             bottom: bottomInset + _bottomNavigationOverlaySpace,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              children: <Widget>[
                 Text(
                   movie.title,
                   maxLines: 2,
@@ -149,7 +158,7 @@ class _HomePageState extends State<HomePage> {
                     fontSize: 44,
                     fontWeight: FontWeight.w900,
                     height: 0.95,
-                    shadows: [
+                    shadows: <Shadow>[
                       Shadow(
                         blurRadius: 10,
                         color: Colors.black87,
@@ -181,7 +190,7 @@ class _HomePageState extends State<HomePage> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: movie.platforms
+                  children: movie.providers
                       .map(
                         (platform) => Container(
                           padding: const EdgeInsets.symmetric(
@@ -203,7 +212,7 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                       )
-                      .toList(),
+                      .toList(growable: false),
                 ),
               ],
             ),
@@ -215,59 +224,114 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final contentProvider = context.watch<ContentProvider>();
+    final items = contentProvider.items;
+
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: const CustomAppBar(isOverlay: true),
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          CardSwiper(
-            key: const Key('home_card_swiper'),
-            controller: _swiperController,
-            cardsCount: swipeContentItems.length,
-            numberOfCardsDisplayed: 2,
-            padding: EdgeInsets.zero,
-            backCardOffset: const Offset(0, 36),
-            isLoop: true,
-            onSwipe: _handleSwipe,
-            allowedSwipeDirection: const AllowedSwipeDirection.symmetric(
-              horizontal: true,
-            ),
-            cardBuilder:
-                (
-                  context,
-                  index,
-                  horizontalOffsetPercentage,
-                  verticalOffsetPercentage,
-                ) {
-                  return _buildMovieCard(context, swipeContentItems[index]);
-                },
-          ),
-          Align(
-            alignment: const Alignment(0, 0.15),
-            child: IgnorePointer(
-              child: _SwipeFloatingFeedback(
-                isVisible: _isSwipeActive,
-                label: _feedbackType == _SwipeFeedbackType.tapp
-                    ? 'Tapp!'
-                    : 'Nopp!',
-                icon: _feedbackType == _SwipeFeedbackType.tapp
-                    ? Icons.favorite_rounded
-                    : Icons.close_rounded,
-                backgroundColor: _feedbackType == _SwipeFeedbackType.tapp
-                    ? const Color(0xFFFF0A63)
-                    : AppColors.brandPrimary,
-                startAngleInDegrees: _feedbackType == _SwipeFeedbackType.tapp
-                    ? -135
-                    : -130,
-                sweepAngleInDegrees: _feedbackType == _SwipeFeedbackType.tapp
-                    ? 82
-                    : 76,
+      body: RefreshIndicator(
+        onRefresh: context.read<ContentProvider>().refreshContent,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                height: constraints.maxHeight,
+                child: _buildBody(context, contentProvider, items),
               ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    ContentProvider contentProvider,
+    List<SwipeContentItem> items,
+  ) {
+    if (contentProvider.isLoading && items.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (contentProvider.errorMessage != null && items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Text(
+                'No se pudo cargar el catálogo.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: context.read<ContentProvider>().loadContent,
+                child: const Text('Intentar de nuevo'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (items.isEmpty) {
+      return const Center(child: Text('Todavía no hay contenido disponible.'));
+    }
+
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        CardSwiper(
+          key: const Key('home_card_swiper'),
+          controller: _swiperController,
+          cardsCount: items.length,
+          numberOfCardsDisplayed: items.length > 1 ? 2 : 1,
+          padding: EdgeInsets.zero,
+          backCardOffset: const Offset(0, 36),
+          isLoop: true,
+          onSwipe: (previousIndex, currentIndex, direction) =>
+              _handleSwipe(items, previousIndex, currentIndex, direction),
+          allowedSwipeDirection: const AllowedSwipeDirection.symmetric(
+            horizontal: true,
+          ),
+          cardBuilder:
+              (
+                context,
+                index,
+                horizontalOffsetPercentage,
+                verticalOffsetPercentage,
+              ) {
+                return _buildMovieCard(context, items[index]);
+              },
+        ),
+        Align(
+          alignment: const Alignment(0, 0.15),
+          child: IgnorePointer(
+            child: _SwipeFloatingFeedback(
+              isVisible: _isSwipeActive,
+              label: _feedbackType == _SwipeFeedbackType.tapp
+                  ? 'Tapp!'
+                  : 'Nopp!',
+              icon: _feedbackType == _SwipeFeedbackType.tapp
+                  ? Icons.favorite_rounded
+                  : Icons.close_rounded,
+              backgroundColor: _feedbackType == _SwipeFeedbackType.tapp
+                  ? const Color(0xFFFF0A63)
+                  : AppColors.brandPrimary,
+              startAngleInDegrees: _feedbackType == _SwipeFeedbackType.tapp
+                  ? -135
+                  : -130,
+              sweepAngleInDegrees: _feedbackType == _SwipeFeedbackType.tapp
+                  ? 82
+                  : 76,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -309,7 +373,7 @@ class _SwipeFloatingFeedback extends StatelessWidget {
           height: _stackSize,
           child: Stack(
             alignment: Alignment.center,
-            children: [
+            children: <Widget>[
               Positioned.fill(
                 child: ExcludeSemantics(
                   excluding: !isVisible,
@@ -343,7 +407,7 @@ class _SwipeFloatingFeedback extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: backgroundColor,
                     shape: BoxShape.circle,
-                    boxShadow: [
+                    boxShadow: <BoxShadow>[
                       BoxShadow(
                         color: backgroundColor.withValues(alpha: 0.45),
                         blurRadius: 16,
@@ -393,7 +457,7 @@ class _ArcTextPainter extends CustomPainter {
             textDirection: TextDirection.ltr,
           )..layout(),
         )
-        .toList();
+        .toList(growable: false);
 
     final totalTextWidth = painters.fold<double>(
       0,

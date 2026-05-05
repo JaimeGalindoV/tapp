@@ -1,6 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
+import 'package:tapp/providers/user_profile_provider.dart';
+import 'package:tapp/repositories/user_repository.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
+import 'package:tapp/widgets/platform_profile_image.dart';
 
 class EditProfilePage extends StatefulWidget {
   const EditProfilePage({super.key});
@@ -11,9 +17,11 @@ class EditProfilePage extends StatefulWidget {
 
 class _EditProfilePageState extends State<EditProfilePage> {
   late final TextEditingController _displayNameController;
-  late final TextEditingController _photoUrlController;
   late final TextEditingController _emailController;
+  final ImagePicker _imagePicker = ImagePicker();
+  XFile? _selectedPhoto;
   bool _isSaving = false;
+  bool _isTakingPhoto = false;
 
   @override
   void initState() {
@@ -21,9 +29,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     final user = _currentUser;
     _displayNameController = TextEditingController(
       text: (user?.displayName ?? '').trim(),
-    );
-    _photoUrlController = TextEditingController(
-      text: (user?.photoURL ?? '').trim(),
     );
     _emailController = TextEditingController(
       text: (user?.email ?? 'demo@tapp.app').trim(),
@@ -38,18 +43,89 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
+  UserRepository get _userRepository => context.read<UserRepository>();
+
   @override
   void dispose() {
     _displayNameController.dispose();
-    _photoUrlController.dispose();
     _emailController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickPhoto() async {
+    try {
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 88,
+      );
+      if (pickedFile == null || !mounted) {
+        return;
+      }
+      setState(() {
+        _selectedPhoto = pickedFile;
+      });
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo abrir la galería.');
+      }
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    setState(() {
+      _isTakingPhoto = true;
+    });
+
+    try {
+      final cameraStatus = await Permission.camera.request();
+      if (!cameraStatus.isGranted) {
+        if (mounted) {
+          _showMessage('Permiso de cámara denegado.');
+        }
+        return;
+      }
+
+      final pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 88,
+      );
+      if (pickedFile == null) {
+        return;
+      }
+
+      final storedPath = await _userRepository.saveCapturedPhotoToSystemGallery(
+        pickedFile,
+      );
+      if (storedPath == null || !mounted) {
+        if (mounted) {
+          _showMessage('No se pudo guardar la foto en tu galería.');
+        }
+        return;
+      }
+
+      setState(() {
+        _selectedPhoto = pickedFile;
+      });
+      _showMessage(
+        'Foto guardada en tu galería. Ya puedes verla desde seleccionar desde galería.',
+      );
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo tomar la foto.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isTakingPhoto = false;
+        });
+      }
+    }
   }
 
   Future<void> _saveProfile() async {
     final user = _currentUser;
     if (user == null) {
-      _showMessage('No hay una sesion activa.');
+      _showMessage('No hay una sesión activa.');
       return;
     }
 
@@ -58,19 +134,27 @@ class _EditProfilePageState extends State<EditProfilePage> {
     });
 
     try {
-      final displayName = _displayNameController.text.trim();
-      final photoUrl = _photoUrlController.text.trim();
-
-      await user.updateDisplayName(displayName.isEmpty ? null : displayName);
-      await user.updatePhotoURL(photoUrl.isEmpty ? null : photoUrl);
-      await user.reload();
+      await context.read<UserProfileProvider>().saveProfile(
+        user: user,
+        displayName: _displayNameController.text.trim(),
+        localPhoto: _selectedPhoto,
+      );
 
       if (mounted) {
+        setState(() {
+          _selectedPhoto = null;
+        });
         _showMessage('Perfil actualizado.');
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        _showMessage('No se pudo actualizar el perfil.');
+        final providerError = context.read<UserProfileProvider>().errorMessage;
+        final resolvedMessage = (providerError ?? error.toString()).trim();
+        _showMessage(
+          resolvedMessage.isEmpty
+              ? 'No se pudo actualizar el perfil.'
+              : 'No se pudo actualizar el perfil: $resolvedMessage',
+        );
       }
     } finally {
       if (mounted) {
@@ -96,15 +180,15 @@ class _EditProfilePageState extends State<EditProfilePage> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
-      ..showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final photoUrl = _photoUrlController.text.trim();
+    final profile = context.watch<UserProfileProvider>().profile;
+    final photoUrl =
+        _selectedPhoto?.path ?? profile?.photoUrl ?? _currentUser?.photoURL;
 
     return Scaffold(
       appBar: const CustomAppBar(
@@ -117,7 +201,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
+            colors: <Color>[
               colorScheme.surfaceContainerHighest.withValues(alpha: 0.38),
               colorScheme.surface,
             ],
@@ -126,7 +210,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
         child: SafeArea(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-            children: [
+            children: <Widget>[
               Text(
                 'Editar perfil',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -135,6 +219,36 @@ class _EditProfilePageState extends State<EditProfilePage> {
               ),
               const SizedBox(height: 16),
               Center(child: _EditableProfileAvatar(photoUrl: photoUrl)),
+              const SizedBox(height: 14),
+              Row(
+                children: <Widget>[
+                  Expanded(
+                    child: TextButton.icon(
+                      key: const Key('config_pick_profile_photo_button'),
+                      onPressed: _pickPhoto,
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Seleccionar desde galería'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextButton.icon(
+                      key: const Key('config_take_profile_photo_button'),
+                      onPressed: _isTakingPhoto ? null : _takePhoto,
+                      icon: _isTakingPhoto
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.photo_camera_outlined),
+                      label: Text(
+                        _isTakingPhoto ? 'Abriendo...' : 'Tomar foto',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 20),
               TextField(
                 key: const Key('config_email_text'),
@@ -149,24 +263,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
               TextField(
                 key: const Key('config_display_name_field'),
                 controller: _displayNameController,
-                textInputAction: TextInputAction.next,
+                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
                   labelText: 'Nombre visible',
                   prefixIcon: Icon(Icons.person_outline_rounded),
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                key: const Key('config_photo_url_field'),
-                controller: _photoUrlController,
-                keyboardType: TextInputType.url,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) {
-                  setState(() {});
-                },
-                decoration: const InputDecoration(
-                  labelText: 'URL de foto',
-                  prefixIcon: Icon(Icons.image_outlined),
                 ),
               ),
               const SizedBox(height: 14),
@@ -200,12 +300,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
 class _EditableProfileAvatar extends StatelessWidget {
   const _EditableProfileAvatar({required this.photoUrl});
 
-  final String photoUrl;
+  final String? photoUrl;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final imageUrl = (photoUrl ?? '').trim();
 
     return Container(
       key: const Key('edit_profile_avatar'),
@@ -217,14 +318,12 @@ class _EditableProfileAvatar extends StatelessWidget {
         color: colorScheme.surfaceContainer,
         border: Border.all(color: colorScheme.outlineVariant),
       ),
-      child: photoUrl.isEmpty
+      child: imageUrl.isEmpty
           ? _LogoAvatar(isDarkMode: isDarkMode)
-          : Image.network(
-              photoUrl,
+          : PlatformProfileImage(
+              photoUrl: imageUrl,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) {
-                return _LogoAvatar(isDarkMode: isDarkMode);
-              },
+              fallback: _LogoAvatar(isDarkMode: isDarkMode),
             ),
     );
   }
@@ -291,7 +390,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
 
     final user = widget.currentUser;
     if (user == null) {
-      widget.onMessage('No hay una sesion activa.');
+      widget.onMessage('No hay una sesión activa.');
       return;
     }
 
@@ -359,7 +458,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
       title: const Text('Cambiar contraseña'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
-        children: [
+        children: <Widget>[
           TextField(
             key: const Key('change_password_current_field'),
             controller: _currentPasswordController,
@@ -391,7 +490,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
           ),
         ],
       ),
-      actions: [
+      actions: <Widget>[
         TextButton(
           onPressed: _isChangingPassword
               ? null

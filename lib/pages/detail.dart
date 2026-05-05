@@ -1,22 +1,223 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:tapp/data/swipe_content_data.dart';
 import 'package:tapp/models/swipe_content_item.dart';
+import 'package:tapp/models/user_review.dart';
+import 'package:tapp/providers/content_provider.dart';
+import 'package:tapp/providers/reviews_provider.dart';
+import 'package:tapp/providers/user_profile_provider.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
 
-class DetailPage extends StatelessWidget {
+class DetailPage extends StatefulWidget {
   const DetailPage({super.key, required this.contentId});
 
   final String contentId;
 
-  SwipeContentItem get content =>
-      swipeContentItems.firstWhere((item) => item.id == contentId);
+  @override
+  State<DetailPage> createState() => _DetailPageState();
+}
+
+class _DetailPageState extends State<DetailPage> {
+  late final TextEditingController _reviewController;
+  bool _isSaving = false;
+  bool _isDeleting = false;
+  bool _hasLocalReviewDraft = false;
+  bool _isApplyingSyncedReviewText = false;
+  String _lastSyncedReviewText = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _reviewController = TextEditingController();
+    _reviewController.addListener(_handleReviewTextChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ContentProvider>().ensureContentAvailable(widget.contentId);
+      _loadCurrentUserReview();
+    });
+  }
+
+  @override
+  void dispose() {
+    _reviewController.removeListener(_handleReviewTextChanged);
+    _reviewController.dispose();
+    super.dispose();
+  }
+
+  void _handleReviewTextChanged() {
+    if (_isApplyingSyncedReviewText) {
+      return;
+    }
+    _hasLocalReviewDraft =
+        _reviewController.text.trim() != _lastSyncedReviewText.trim();
+  }
+
+  void _applySyncedReviewText(String text) {
+    _isApplyingSyncedReviewText = true;
+    _reviewController.value = _reviewController.value.copyWith(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+      composing: TextRange.empty,
+    );
+    _lastSyncedReviewText = text;
+    _hasLocalReviewDraft = false;
+    _isApplyingSyncedReviewText = false;
+  }
+
+  Future<void> _loadCurrentUserReview() async {
+    final user = _currentUserSafe;
+    if (user == null) {
+      return;
+    }
+
+    try {
+      final review = await context.read<ReviewsProvider>().getUserReviewForContent(
+        contentId: widget.contentId,
+        userId: user.uid,
+      );
+      if (!mounted) {
+        return;
+      }
+      _applySyncedReviewText(review?.text ?? '');
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo cargar tu reseña actual.');
+      }
+    }
+  }
+
+  Future<void> _saveReview(User user) async {
+    final text = _reviewController.text.trim();
+    if (text.isEmpty) {
+      _showMessage('Escribe una reseña antes de guardar.');
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await context.read<ReviewsProvider>().upsertReview(
+        contentId: widget.contentId,
+        user: user,
+        text: text,
+      );
+      _applySyncedReviewText(text);
+      if (!mounted) {
+        return;
+      }
+      await context.read<UserProfileProvider>().refreshStats(user);
+      _showMessage('Reseña guardada.');
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo guardar la reseña.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteReview(User user) async {
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      await context.read<ReviewsProvider>().deleteReview(
+        contentId: widget.contentId,
+        userId: user.uid,
+      );
+      if (!mounted) {
+        return;
+      }
+      _applySyncedReviewText('');
+      await context.read<UserProfileProvider>().refreshStats(user);
+      _showMessage('Reseña eliminada.');
+    } catch (_) {
+      if (mounted) {
+        _showMessage('No se pudo eliminar la reseña.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
-    final item = content;
+    final contentProvider = context.watch<ContentProvider>();
+    final item = contentProvider.getById(widget.contentId);
+    if (item == null) {
+      return _buildMissingContentState(context, contentProvider);
+    }
+
+    final reviewsProvider = context.watch<ReviewsProvider>();
+    return StreamBuilder<List<UserReview>>(
+      stream: reviewsProvider.watchReviews(widget.contentId),
+      builder: (context, snapshot) {
+        final reviewsError = snapshot.hasError
+            ? 'No se pudieron cargar las reseñas.'
+            : null;
+        final isLoadingReviews =
+            snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData;
+        final reviews = snapshot.data ?? const <UserReview>[];
+        if (reviewsError == null) {
+          _syncCurrentUserText(reviews);
+        }
+        return _buildScaffold(
+          context,
+          item,
+          reviews,
+          reviewsError: reviewsError,
+          isLoadingReviews: isLoadingReviews,
+        );
+      },
+    );
+  }
+
+  void _syncCurrentUserText(List<UserReview> reviews) {
+    final user = _currentUserSafe;
+    if (user == null || _hasLocalReviewDraft) {
+      return;
+    }
+
+    final currentUserReview = _findCurrentUserReview(reviews, user.uid);
+    final remoteText = currentUserReview?.text ?? '';
+    if (_lastSyncedReviewText == remoteText &&
+        _reviewController.text == remoteText) {
+      return;
+    }
+
+    _applySyncedReviewText(remoteText);
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    SwipeContentItem item,
+    List<UserReview> reviews,
+    {String? reviewsError, bool isLoadingReviews = false}
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final user = _currentUserSafe;
+    final currentUserReview = user == null
+        ? null
+        : _findCurrentUserReview(reviews, user.uid);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -27,218 +228,436 @@ class DetailPage extends StatelessWidget {
         isOverlay: true,
       ),
       backgroundColor: colorScheme.surface,
-      body: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          AspectRatio(
-            aspectRatio: 3 / 4,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.network(
-                  item.posterUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    color: colorScheme.surfaceContainerHigh,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.broken_image_outlined,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await context.read<ContentProvider>().refreshContent();
+          await _loadCurrentUserReview();
+        },
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
+          children: <Widget>[
+            AspectRatio(
+              aspectRatio: 3 / 4,
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  Image.network(
+                    item.posterUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: colorScheme.surfaceContainerHigh,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.broken_image_outlined,
+                        color: colorScheme.onSurfaceVariant,
+                        size: 44,
+                      ),
+                    ),
+                  ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: isDarkMode
+                            ? const <Color>[
+                                Color(0x12000000),
+                                Color(0x520E0E11),
+                                Color(0xFF0E0E11),
+                                Color(0xFF0E0E11),
+                              ]
+                            : const <Color>[
+                                Color(0x12000000),
+                                Color(0x3FFFFFFF),
+                                Color(0xFFF6F6F8),
+                                Color(0xFFF6F6F8),
+                              ],
+                        stops: const <double>[0, 0.72, 0.96, 1],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 24,
+                    right: 24,
+                    bottom: 16,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(
+                          item.title.toUpperCase(),
+                          style: const TextStyle(
+                            color: Color(0xFFE0C17A),
+                            fontSize: 34,
+                            height: 0.95,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '${item.type == ContentType.movie ? 'Película' : 'Serie'} | ${item.year} | ${item.genres.join(' | ')}',
+                          style: TextStyle(
+                            color: isDarkMode
+                                ? Colors.white70
+                                : colorScheme.onSurfaceVariant,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 26),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    item.overview,
+                    style: TextStyle(
                       color: colorScheme.onSurfaceVariant,
-                      size: 44,
+                      fontSize: 20,
+                      height: 1.4,
                     ),
                   ),
-                ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: isDarkMode
-                          ? const [
-                              Color(0x12000000),
-                              Color(0x520E0E11),
-                              Color(0xFF0E0E11),
-                              Color(0xFF0E0E11),
-                            ]
-                          : const [
-                              Color(0x12000000),
-                              Color(0x3FFFFFFF),
-                              Color(0xFFF6F6F8),
-                              Color(0xFFF6F6F8),
-                            ],
-                      stops: [0.0, 0.72, 0.96, 1.0],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 24,
-                  right: 24,
-                  bottom: 16,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  const SizedBox(height: 22),
+                  Row(
+                    children: <Widget>[
+                      ...List<Widget>.generate(5, (index) {
+                        final star = index < item.rating.round()
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded;
+                        return Icon(
+                          star,
+                          color: colorScheme.onSurface,
+                          size: 31,
+                        );
+                      }),
+                      const SizedBox(width: 10),
                       Text(
-                        item.title.toUpperCase(),
-                        style: const TextStyle(
-                          color: Color(0xFFE0C17A),
-                          fontSize: 34,
-                          height: 0.95,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.1,
+                        item.rating.toStringAsFixed(1),
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const Spacer(),
+                      Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        color: colorScheme.onSurfaceVariant,
+                        size: 28,
+                      ),
+                      const SizedBox(width: 8),
                       Text(
-                        '${item.type == ContentType.movie ? 'Pelicula' : 'Serie'} · ${item.year} · ${item.genres.join(' · ')}',
+                        reviewsError != null
+                            ? '!'
+                            : (isLoadingReviews
+                                  ? '...'
+                                  : reviews.length.toString()),
                         style: TextStyle(
-                          color: isDarkMode
-                              ? Colors.white70
-                              : colorScheme.onSurfaceVariant,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 18),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () => _shareContent(item),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            Icons.share_rounded,
+                            color: colorScheme.onSurfaceVariant,
+                            size: 30,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 26),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${item.title} es una ${item.type == ContentType.movie ? 'pelicula' : 'serie'} de ${item.genres.join(', ')} estrenada en ${item.year}.',
-                  style: TextStyle(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 20,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Row(
-                  children: [
-                    ...List<Widget>.generate(5, (index) {
-                      final star = index < item.rating.round()
-                          ? Icons.star_rounded
-                          : Icons.star_outline_rounded;
-                      return Icon(star, color: colorScheme.onSurface, size: 31);
-                    }),
-                    const SizedBox(width: 10),
-                    Text(
-                      item.rating.toStringAsFixed(1),
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      Icons.chat_bubble_outline_rounded,
+                  const SizedBox(height: 28),
+                  Text(
+                    'STREAMING en',
+                    style: TextStyle(
                       color: colorScheme.onSurfaceVariant,
-                      size: 28,
+                      fontSize: 24,
+                      letterSpacing: 0.3,
+                      fontWeight: FontWeight.w700,
                     ),
-                    const SizedBox(width: 8),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: item.providers
+                        .map(
+                          (platform) => Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surfaceContainerLow,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: colorScheme.outlineVariant,
+                              ),
+                            ),
+                            child: Text(
+                              platform,
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                  const SizedBox(height: 26),
+                  if (item.type == ContentType.movie &&
+                      item.durationMinutes != null)
                     Text(
-                      _formatCommentCount(item.commentCount),
+                      'Duración: ${item.durationMinutes} min',
                       style: TextStyle(
                         color: colorScheme.onSurfaceVariant,
-                        fontSize: 22,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(width: 18),
-                    InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () => _shareContent(item),
-                      child: Padding(
-                        padding: EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.share_rounded,
-                          color: colorScheme.onSurfaceVariant,
-                          size: 30,
+                  const SizedBox(height: 32),
+                  Text(
+                    'Tu reseña',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    key: const Key('detail_review_field'),
+                    controller: _reviewController,
+                    minLines: 3,
+                    maxLines: 5,
+                    enabled: user != null,
+                    decoration: InputDecoration(
+                      hintText: user == null
+                          ? 'Inicia sesión para escribir una reseña.'
+                          : 'Escribe tu opinión sobre este título',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          key: const Key('detail_save_review_button'),
+                          onPressed: user == null || _isSaving
+                              ? null
+                              : () => _saveReview(user),
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.save_outlined),
+                          label: Text(
+                            currentUserReview == null
+                                ? 'Crear reseña'
+                                : 'Guardar cambios',
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-                Text(
-                  'STREAMING en',
-                  style: TextStyle(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 24,
-                    letterSpacing: 0.3,
-                    fontWeight: FontWeight.w700,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          key: const Key('detail_delete_review_button'),
+                          onPressed:
+                              user == null ||
+                                  currentUserReview == null ||
+                                  _isDeleting
+                              ? null
+                              : () => _deleteReview(user),
+                          icon: _isDeleting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.delete_outline),
+                          label: const Text('Eliminar'),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: item.platforms
-                      .map(
-                        (platform) => Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Reseñas recientes',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (reviewsError != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: colorScheme.outlineVariant),
+                      ),
+                      child: Text(
+                        reviewsError,
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    )
+                  else if (isLoadingReviews && reviews.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (reviews.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: colorScheme.outlineVariant),
+                      ),
+                      child: Text(
+                        'Todavía no hay reseñas para este título.',
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    ...reviews.map(
+                      (review) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             color: colorScheme.surfaceContainerLow,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
                             border: Border.all(
                               color: colorScheme.outlineVariant,
                             ),
                           ),
-                          child: Text(
-                            platform,
-                            style: TextStyle(
-                              color: colorScheme.onSurface,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                review.userDisplayName,
+                                style: TextStyle(
+                                  color: colorScheme.onSurface,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                review.text,
+                                style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 26),
-                if (item.type == ContentType.movie &&
-                    item.durationMinutes != null)
-                  Text(
-                    'Duracion: ${item.durationMinutes} min',
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  String _formatCommentCount(int count) {
-    if (count < 1000) {
-      return '+$count';
+  Widget _buildMissingContentState(
+    BuildContext context,
+    ContentProvider contentProvider,
+  ) {
+    if (contentProvider.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final inThousands = count / 1000;
-    return '+${inThousands.toStringAsFixed(1)}k';
+
+    final message = (contentProvider.errorMessage ?? '').trim();
+    final resolvedMessage = message.isNotEmpty
+        ? message
+        : 'No se pudo cargar este contenido o ya no está disponible.';
+
+    return Scaffold(
+      appBar: const CustomAppBar(
+        showBackButton: true,
+        logoCentered: true,
+        showConfigButton: true,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                resolvedMessage,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: () {
+                  context.read<ContentProvider>().ensureContentAvailable(
+                    widget.contentId,
+                  );
+                },
+                child: const Text('Intentar de nuevo'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _shareContent(SwipeContentItem item) async {
-    final typeLabel = item.type == ContentType.movie ? 'pelicula' : 'serie';
+    final typeLabel = item.type == ContentType.movie ? 'película' : 'serie';
     final message =
         'Te recomiendo $typeLabel: ${item.title} (${item.year})\n'
-        'Generos: ${item.genres.join(', ')}\n'
+        'Géneros: ${item.genres.join(', ')}\n'
         'Calificacion: ${item.rating.toStringAsFixed(1)}\n'
-        'Disponible en: ${item.platforms.join(', ')}\n\n'
+        'Disponible en: ${item.providers.join(', ')}\n\n'
         'Visto en Tapp.';
 
-    await Share.share(message, subject: 'Recomendacion: ${item.title}');
+    await SharePlus.instance.share(
+      ShareParams(text: message, subject: 'Recomendación: ${item.title}'),
+    );
+  }
+
+  UserReview? _findCurrentUserReview(List<UserReview> reviews, String userId) {
+    for (final review in reviews) {
+      if (review.userId == userId) {
+        return review;
+      }
+    }
+    return null;
+  }
+
+  User? get _currentUserSafe {
+    try {
+      return FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      return null;
+    }
   }
 }

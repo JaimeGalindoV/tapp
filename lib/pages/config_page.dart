@@ -112,10 +112,10 @@ class ConfigPage extends StatelessWidget {
                   key: const Key('config_logout_tile'),
                   leading: const Icon(Icons.logout_rounded),
                   title: const Text(
-                    'Cerrar sesion',
+                    'Cerrar sesión',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  subtitle: const Text('Volver al inicio de sesion'),
+                  subtitle: const Text('Volver al inicio de sesión'),
                   trailing: Icon(
                     Icons.chevron_right_rounded,
                     color: colorScheme.onSurfaceVariant,
@@ -124,7 +124,6 @@ class ConfigPage extends StatelessWidget {
                     try {
                       await FirebaseAuth.instance.signOut();
                     } catch (_) {
-                      // Firebase may not be initialized in widget tests.
                     }
                     if (context.mounted) {
                       Navigator.of(context).pop();

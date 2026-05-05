@@ -24,6 +24,12 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Tapp necesita acceso a la camara para tomar una foto de perfil.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Tapp necesita guardar la foto tomada en tu galeria para que puedas seleccionarla despues.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Tapp necesita acceso a tu galeria para elegir foto de perfil.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
