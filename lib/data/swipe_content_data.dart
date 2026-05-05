@@ -1,17 +1,18 @@
 import 'package:tapp/models/swipe_content_item.dart';
 
-const List<SwipeContentItem> swipeContentItems = [
+const List<SwipeContentItem> swipeContentItems = <SwipeContentItem>[
   SwipeContentItem(
     id: 'm_dune_2',
     title: 'Dune: Part Two',
     year: 2024,
     type: ContentType.movie,
-    genres: ['Sci-Fi', 'Adventure'],
+    genres: <String>['Sci-Fi', 'Adventure'],
     posterUrl:
         'https://images.hdqwalls.com/download/dune-part-two-poster-5k-pb-1080x2400.jpg',
-    platforms: ['Max', 'Prime Video'],
+    providers: <String>['Max', 'Prime Video'],
     rating: 4.6,
-    commentCount: 540,
+    overview:
+        'Paul Atreides joins the Fremen while he confronts war, power and the fate of Arrakis.',
     durationMinutes: 166,
   ),
   SwipeContentItem(
@@ -19,36 +20,39 @@ const List<SwipeContentItem> swipeContentItems = [
     title: 'Breaking Bad',
     year: 2008,
     type: ContentType.series,
-    genres: ['Crime', 'Drama'],
+    genres: <String>['Crime', 'Drama'],
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/ztkUQFLlC19CCMYHW9o1zWhJRNq.jpg',
-    platforms: ['Netflix'],
+    providers: <String>['Netflix'],
     rating: 4.9,
-    commentCount: 2400,
+    overview:
+        'A chemistry teacher turns to crime after a diagnosis changes his life forever.',
   ),
   SwipeContentItem(
     id: 's_lupin',
     title: 'Lupin',
     year: 2021,
     type: ContentType.series,
-    genres: ['Mystery', 'Crime'],
+    genres: <String>['Mystery', 'Crime'],
     posterUrl:
         'https://image.tmdb.org/t/p/w780/sgxawbFB5Vi5OkPWQLNfl3dvkNJ.jpg',
-    platforms: ['Netflix'],
+    providers: <String>['Netflix'],
     rating: 4.2,
-    commentCount: 860,
+    overview:
+        'Assane uses charm and strategy to avenge his father through impossible heists.',
   ),
   SwipeContentItem(
     id: 'm_poor_things',
     title: 'Poor Things',
     year: 2023,
     type: ContentType.movie,
-    genres: ['Drama', 'Fantasy'],
+    genres: <String>['Drama', 'Fantasy'],
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/gNTWQuQCAjwOPwdxc3hDoVZfv5n.jpg',
-    platforms: ['Disney+', 'Star+'],
+    providers: <String>['Disney+', 'Star+'],
     rating: 4.1,
-    commentCount: 390,
+    overview:
+        'Bella Baxter travels the world in a surreal coming-of-age journey about freedom and desire.',
     durationMinutes: 141,
   ),
   SwipeContentItem(
@@ -56,24 +60,26 @@ const List<SwipeContentItem> swipeContentItems = [
     title: 'Dark',
     year: 2017,
     type: ContentType.series,
-    genres: ['Sci-Fi', 'Thriller'],
+    genres: <String>['Sci-Fi', 'Thriller'],
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/hRP7N2uI0pokxnkcMFONoOZnxbv.jpg',
-    platforms: ['Netflix'],
+    providers: <String>['Netflix'],
     rating: 4.7,
-    commentCount: 1700,
+    overview:
+        'Families in a small town uncover a time-travel mystery tied to missing children.',
   ),
   SwipeContentItem(
     id: 'm_the_batman',
     title: 'The Batman',
     year: 2022,
     type: ContentType.movie,
-    genres: ['Action', 'Crime'],
+    genres: <String>['Action', 'Crime'],
     posterUrl:
         'https://image.tmdb.org/t/p/w780/74xTEgt7R36Fpooo50r9T25onhq.jpg',
-    platforms: ['Max', 'Apple TV'],
+    providers: <String>['Max', 'Apple TV'],
     rating: 4.3,
-    commentCount: 1200,
+    overview:
+        'Batman hunts a serial killer whose riddles expose corruption throughout Gotham.',
     durationMinutes: 176,
   ),
   SwipeContentItem(
@@ -81,12 +87,13 @@ const List<SwipeContentItem> swipeContentItems = [
     title: 'Spider-Man: Across the Spider-Verse',
     year: 2023,
     type: ContentType.movie,
-    genres: ['Animation', 'Action'],
+    genres: <String>['Animation', 'Action'],
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/rXhgHQmtjTIQOEDU8E2TbUFMjWM.jpg',
-    platforms: ['Netflix', 'Prime Video'],
+    providers: <String>['Netflix', 'Prime Video'],
     rating: 4.8,
-    commentCount: 2300,
+    overview:
+        'Miles Morales crosses the multiverse and collides with a league of Spider-People.',
     durationMinutes: 140,
   ),
   SwipeContentItem(
@@ -94,11 +101,12 @@ const List<SwipeContentItem> swipeContentItems = [
     title: 'Arcane',
     year: 2021,
     type: ContentType.series,
-    genres: ['Animation', 'Fantasy'],
+    genres: <String>['Animation', 'Fantasy'],
     posterUrl:
         'https://www.themoviedb.org/t/p/w600_and_h900_face/i1vSPUbiBe2iK2HapGDfHItBFlC.jpg',
-    platforms: ['Netflix'],
+    providers: <String>['Netflix'],
     rating: 4.8,
-    commentCount: 1800,
+    overview:
+        'Two sisters end up on opposite sides of a city divided by magic, science and class.',
   ),
 ];

@@ -83,5 +83,4 @@ class DefaultFirebaseOptions {
     authDomain: 'tapp-6e74a.firebaseapp.com',
     storageBucket: 'tapp-6e74a.firebasestorage.app',
   );
-
 }

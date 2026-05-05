@@ -39,9 +39,17 @@ dependencies:
   share_plus: ^13.0.0
   firebase_core: ^4.7.0
   firebase_auth: ^6.4.0
+  cloud_firestore: ^6.1.0
+  firebase_messaging: ^16.0.2
   firebase_ui_auth: ^3.0.1
   firebase_ui_oauth_google: ^2.0.1
   google_sign_in: ^6.3.0
+  http: ^1.6.0
+  image_picker: ^1.2.0
+  path_provider: ^2.1.5
+  permission_handler: ^12.0.1
+  gallery_saver_plus: ^3.2.9
+  flutter_dotenv: ^5.2.1
 
 dev_dependencies:
   flutter_test:
@@ -97,6 +105,7 @@ flutter:
   # see https://flutter.dev/to/font-from-package
 
   assets:
+    - .env
     - assets/images/TappLogoBlack.png
     - assets/images/TappLogoWhite.png
     - assets/images/LogoShortWhite.png

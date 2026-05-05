@@ -2,8 +2,11 @@ import 'package:firebase_auth/firebase_auth.dart' hide EmailAuthProvider;
 import 'package:firebase_ui_auth/firebase_ui_auth.dart';
 import 'package:firebase_ui_oauth_google/firebase_ui_oauth_google.dart';
 import 'package:flutter/material.dart';
-
+import 'package:provider/provider.dart';
 import 'package:tapp/pages/main_page.dart';
+import 'package:tapp/providers/content_provider.dart';
+import 'package:tapp/providers/likes_provider.dart';
+import 'package:tapp/providers/user_profile_provider.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -15,13 +18,14 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        final user = snapshot.data;
+        if (user == null) {
           return SignInScreen(
             providers: [
               EmailAuthProvider(),
               GoogleProvider(
                 clientId:
-                    "702786780990-2c2i5cu0stk16n0na1s1gf21qfhth67m.apps.googleusercontent.com",
+                    '702786780990-2c2i5cu0stk16n0na1s1gf21qfhth67m.apps.googleusercontent.com',
               ),
             ],
             headerBuilder: (context, constraints, shrinkOffset) {
@@ -39,10 +43,12 @@ class AuthGate extends StatelessWidget {
             },
             subtitleBuilder: (context, action) {
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: action == AuthAction.signIn
-                    ? const Text('Welcome to Tapp, please sign in!')
-                    : const Text('Welcome to Tapp, please sign up!'),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  action == AuthAction.signIn
+                      ? 'Welcome to Tapp, please sign in!'
+                      : 'Welcome to Tapp, please sign up!',
+                ),
               );
             },
             footerBuilder: (context, action) {
@@ -65,6 +71,61 @@ class AuthGate extends StatelessWidget {
             },
           );
         }
+        return _AuthenticatedRoot(user: user);
+      },
+    );
+  }
+}
+
+class _AuthenticatedRoot extends StatefulWidget {
+  const _AuthenticatedRoot({required this.user});
+
+  final User user;
+
+  @override
+  State<_AuthenticatedRoot> createState() => _AuthenticatedRootState();
+}
+
+class _AuthenticatedRootState extends State<_AuthenticatedRoot> {
+  Future<void>? _bootstrapFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bootstrapFuture = _bootstrap();
+  }
+
+  @override
+  void didUpdateWidget(covariant _AuthenticatedRoot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.uid != widget.user.uid) {
+      _bootstrapFuture = _bootstrap();
+    }
+  }
+
+  Future<void> _bootstrap() async {
+    final likesProvider = context.read<LikesProvider>();
+    final contentProvider = context.read<ContentProvider>();
+    final userProfileProvider = context.read<UserProfileProvider>();
+
+    await likesProvider.bindUser(widget.user.uid);
+    await Future.wait(<Future<void>>[
+      contentProvider.loadContent(),
+      userProfileProvider.bindUser(widget.user),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _bootstrapFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
         return const MainPage();
       },
     );

@@ -1,11 +1,14 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tapp/data/swipe_content_data.dart';
 import 'package:tapp/models/app_user_profile.dart';
 import 'package:tapp/models/swipe_content_item.dart';
 import 'package:tapp/pages/detail.dart';
+import 'package:tapp/providers/content_provider.dart';
 import 'package:tapp/providers/likes_provider.dart';
+import 'package:tapp/providers/user_profile_provider.dart';
 import 'package:tapp/widgets/custom_app_bar.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -23,115 +26,126 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final likesProvider = context.watch<LikesProvider>();
+    final contentProvider = context.watch<ContentProvider>();
+    final userProfileProvider = context.watch<UserProfileProvider>();
     final colorScheme = Theme.of(context).colorScheme;
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final bottomScrollPadding = bottomInset + 100;
-    final items = _buildVisibleItems(likesProvider);
+    final userProfile =
+        userProfileProvider.profile ?? _fallbackUserProfile(_currentUserSafe);
+    final items = _buildVisibleItems(likesProvider, contentProvider.items);
     final seriesItems = items
         .where((item) => item.type == ContentType.series)
         .toList(growable: false);
     final movieItems = items
         .where((item) => item.type == ContentType.movie)
         .toList(growable: false);
-    final auth = _authInstance;
 
-    return StreamBuilder<User?>(
-      stream: auth?.userChanges() ?? Stream<User?>.value(null),
-      initialData: auth?.currentUser,
-      builder: (context, snapshot) {
-        final userProfile = _buildUserProfile(snapshot.data);
-        return Scaffold(
-          appBar: const CustomAppBar(title: 'Profile'),
-          body: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-                  colorScheme.surface,
+    return Scaffold(
+      appBar: const CustomAppBar(title: 'Profile'),
+      body: RefreshIndicator(
+        onRefresh: _refreshProfile,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: <Color>[
+                colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                colorScheme.surface,
+              ],
+            ),
+          ),
+          child: SafeArea(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(16, 10, 16, bottomScrollPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  _ProfileHeader(userProfile: userProfile),
+                  const SizedBox(height: 20),
+                  _ProfileActionRow(
+                    isContentVisible: _isContentVisible,
+                    favoritesOnly: _favoritesOnly,
+                    sortNewestFirst: _sortNewestFirst,
+                    onToggleContentVisible: () {
+                      setState(() {
+                        _isContentVisible = !_isContentVisible;
+                      });
+                    },
+                    onToggleFavoritesOnly: () {
+                      setState(() {
+                        _favoritesOnly = !_favoritesOnly;
+                      });
+                    },
+                    onToggleOrder: () {
+                      setState(() {
+                        _sortNewestFirst = !_sortNewestFirst;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 26),
+                  if (!_isContentVisible)
+                    Container(
+                      key: const Key('profile_content_hidden_placeholder'),
+                      height: 200,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: colorScheme.outlineVariant),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Contenido oculto',
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  else ...<Widget>[
+                    _ContentSection(
+                      title: 'Series',
+                      items: seriesItems,
+                      emptyLabel: _favoritesOnly
+                          ? 'No tienes series favoritas todavía'
+                          : 'No hay series disponibles',
+                    ),
+                    const SizedBox(height: 22),
+                    _ContentSection(
+                      title: 'Peliculas',
+                      items: movieItems,
+                      emptyLabel: _favoritesOnly
+                          ? 'No tienes peliculas favoritas todavía'
+                          : 'No hay peliculas disponibles',
+                    ),
+                  ],
                 ],
               ),
             ),
-            child: SafeArea(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(16, 10, 16, bottomScrollPadding),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _ProfileHeader(userProfile: userProfile),
-                    const SizedBox(height: 20),
-                    _ProfileActionRow(
-                      isContentVisible: _isContentVisible,
-                      favoritesOnly: _favoritesOnly,
-                      sortNewestFirst: _sortNewestFirst,
-                      onToggleContentVisible: () {
-                        setState(() {
-                          _isContentVisible = !_isContentVisible;
-                        });
-                      },
-                      onToggleFavoritesOnly: () {
-                        setState(() {
-                          _favoritesOnly = !_favoritesOnly;
-                        });
-                      },
-                      onToggleOrder: () {
-                        setState(() {
-                          _sortNewestFirst = !_sortNewestFirst;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 26),
-                    if (!_isContentVisible)
-                      Container(
-                        key: const Key('profile_content_hidden_placeholder'),
-                        height: 200,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: colorScheme.surfaceContainerLow,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: colorScheme.outlineVariant),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Contenido oculto',
-                          style: TextStyle(
-                            color: colorScheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      )
-                    else ...[
-                      _ContentSection(
-                        title: 'Series',
-                        items: seriesItems,
-                        emptyLabel: _favoritesOnly
-                            ? 'No likes yet in Series'
-                            : 'No Series available',
-                      ),
-                      const SizedBox(height: 22),
-                      _ContentSection(
-                        title: 'Peliculas',
-                        items: movieItems,
-                        emptyLabel: _favoritesOnly
-                            ? 'No likes yet in Peliculas'
-                            : 'No Peliculas available',
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  List<SwipeContentItem> _buildVisibleItems(LikesProvider likesProvider) {
+  Future<void> _refreshProfile() async {
+    final user = _currentUserSafe;
+    await context.read<ContentProvider>().refreshContent();
+    if (user != null && mounted) {
+      await context.read<UserProfileProvider>().bindUser(user);
+    }
+  }
+
+  List<SwipeContentItem> _buildVisibleItems(
+    LikesProvider likesProvider,
+    List<SwipeContentItem> catalog,
+  ) {
     final sourceItems = _favoritesOnly
-        ? likesProvider.likedItems
-        : swipeContentItems;
+        ? likesProvider.resolveLikedItems(catalog)
+        : List<SwipeContentItem>.from(catalog, growable: false);
 
     if (_sortNewestFirst) {
       return List<SwipeContentItem>.from(sourceItems, growable: false);
@@ -140,55 +154,26 @@ class _ProfilePageState extends State<ProfilePage> {
     return sourceItems.reversed.toList(growable: false);
   }
 
-  FirebaseAuth? get _authInstance {
+  AppUserProfile _fallbackUserProfile(User? user) {
+    final email = (user?.email ?? 'demo@tapp.app').trim();
+    final displayName = (user?.displayName ?? '').trim();
+    final resolvedName = displayName.isNotEmpty
+        ? displayName
+        : (email.contains('@') ? email.split('@').first : 'usuario_demo');
+
+    return AppUserProfile(
+      uid: user?.uid ?? 'demo',
+      email: email,
+      displayName: resolvedName,
+    );
+  }
+
+  User? get _currentUserSafe {
     try {
-      return FirebaseAuth.instance;
+      return FirebaseAuth.instance.currentUser;
     } catch (_) {
       return null;
     }
-  }
-
-  AppUserProfile _fallbackUserProfile() {
-    return const AppUserProfile(
-      email: 'demo@tapp.app',
-      handle: '@usuario_demo',
-      photoUrl: null,
-      followersLabel: '0 siguen esta cuenta',
-    );
-  }
-
-  AppUserProfile _buildUserProfile(User? user) {
-    if (user == null) {
-      return _fallbackUserProfile();
-    }
-
-    final normalizedEmail = (user.email ?? '').trim().toLowerCase();
-    final fallbackName = normalizedEmail.contains('@')
-        ? normalizedEmail.split('@').first
-        : normalizedEmail;
-    final displayName = (user.displayName ?? '').trim();
-    final sourceName = displayName.isNotEmpty
-        ? user.displayName!.trim()
-        : fallbackName;
-    final name = sourceName.isEmpty ? 'usuario_demo' : sourceName;
-
-    final hashSeed = normalizedEmail.isNotEmpty ? normalizedEmail : name;
-    final hash = hashSeed.codeUnits.fold<int>(0, (sum, code) {
-      return (sum + code) % 1900000;
-    });
-    final followers = 100000 + hash;
-    final followersText = followers >= 1000000
-        ? '${(followers / 1000000).toStringAsFixed(1)} M'
-        : '${(followers / 1000).toStringAsFixed(1)} K';
-
-    return AppUserProfile(
-      email: normalizedEmail.isEmpty ? 'demo@tapp.app' : normalizedEmail,
-      handle: name,
-      photoUrl: (user.photoURL ?? '').trim().isEmpty
-          ? null
-          : user.photoURL!.trim(),
-      followersLabel: '$followersText siguen esta cuenta',
-    );
   }
 }
 
@@ -202,12 +187,12 @@ class _ProfileHeader extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Row(
-      children: [
+      children: <Widget>[
         _ProfileAvatar(photoUrl: userProfile.photoUrl),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          children: <Widget>[
             Text(
               userProfile.handle,
               key: const Key('profile_user_handle'),
@@ -215,7 +200,7 @@ class _ProfileHeader extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              userProfile.followersLabel,
+              userProfile.statsLabel,
               key: const Key('profile_user_followers'),
               style: TextStyle(
                 fontSize: 13,
@@ -252,13 +237,40 @@ class _ProfileAvatar extends StatelessWidget {
       ),
       child: imageUrl.isEmpty
           ? _ProfileLogoAvatar(isDarkMode: isDarkMode)
-          : Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) {
-                return _ProfileLogoAvatar(isDarkMode: isDarkMode);
-              },
-            ),
+          : _ProfileImage(photoUrl: imageUrl, isDarkMode: isDarkMode),
+    );
+  }
+}
+
+class _ProfileImage extends StatelessWidget {
+  const _ProfileImage({required this.photoUrl, required this.isDarkMode});
+
+  final String photoUrl;
+  final bool isDarkMode;
+
+  @override
+  Widget build(BuildContext context) {
+    if (photoUrl.startsWith('http')) {
+      return Image.network(
+        photoUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return _ProfileLogoAvatar(isDarkMode: isDarkMode);
+        },
+      );
+    }
+
+    final file = File(photoUrl);
+    if (!file.existsSync()) {
+      return _ProfileLogoAvatar(isDarkMode: isDarkMode);
+    }
+
+    return Image.file(
+      file,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return _ProfileLogoAvatar(isDarkMode: isDarkMode);
+      },
     );
   }
 }
@@ -303,7 +315,7 @@ class _ProfileActionRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: [
+      children: <Widget>[
         _ActionIcon(
           keyName: 'profile_btn_visibility',
           icon: isContentVisible
@@ -392,7 +404,7 @@ class _ContentSection extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+      children: <Widget>[
         Text(
           title,
           style: const TextStyle(fontSize: 31, fontWeight: FontWeight.w700),
@@ -423,7 +435,7 @@ class _ContentSection extends StatelessWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final item = items[index];
                 return _ProfilePosterCard(item: item);
@@ -453,7 +465,7 @@ class _ProfilePosterCard extends StatelessWidget {
         width: 120,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          children: <Widget>[
             Expanded(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
@@ -470,8 +482,14 @@ class _ProfilePosterCard extends StatelessWidget {
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: isDark
-                              ? const [Color(0xFF3A3A3A), Color(0xFF161616)]
-                              : const [Color(0xFFE2E2E2), Color(0xFFBEBEBE)],
+                              ? const <Color>[
+                                  Color(0xFF3A3A3A),
+                                  Color(0xFF161616),
+                                ]
+                              : const <Color>[
+                                  Color(0xFFE2E2E2),
+                                  Color(0xFFBEBEBE),
+                                ],
                         ),
                       ),
                     );
