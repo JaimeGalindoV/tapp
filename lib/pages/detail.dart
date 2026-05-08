@@ -294,7 +294,7 @@ class _DetailPageState extends State<DetailPage> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          '${item.type == ContentType.movie ? 'Película' : 'Serie'} | ${item.year} | ${item.genres.join(' | ')}',
+                          '${item.type == ContentType.movie ? 'Película' : 'Serie'} | ${(item.type == ContentType.movie && item.durationMinutes != null) ? '${item.durationMinutes} min' : ''} | ${item.year} ${item.genres.join(' | ')}',
                           style: TextStyle(
                             color: isDarkMode
                                 ? Colors.white70
@@ -314,6 +314,16 @@ class _DetailPageState extends State<DetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  if (item.type == ContentType.movie && item.durationMinutes != null)
+                    Text(
+                      'Duración: ${item.durationMinutes} min',
+                      style: TextStyle(
+                        color: colorScheme.onSurfaceVariant,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  const SizedBox(height: 10),
                   Text(
                     item.overview,
                     style: TextStyle(
@@ -416,17 +426,6 @@ class _DetailPageState extends State<DetailPage> {
                         )
                         .toList(growable: false),
                   ),
-                  const SizedBox(height: 26),
-                  if (item.type == ContentType.movie &&
-                      item.durationMinutes != null)
-                    Text(
-                      'Duración: ${item.durationMinutes} min',
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
                   const SizedBox(height: 32),
                   Text(
                     'Tu reseña',
