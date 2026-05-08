@@ -262,18 +262,16 @@ class _DetailPageState extends State<DetailPage> {
                         end: Alignment.bottomCenter,
                         colors: isDarkMode
                             ? const <Color>[
-                                Color(0x12000000),
-                                Color(0x520E0E11),
-                                Color(0xFF0E0E11),
-                                Color(0xFF0E0E11),
+                                Color(0x00000000),
+                                Color(0xE2141414),
+                                Color(0xFF141414),
                               ]
                             : const <Color>[
-                                Color(0x12000000),
-                                Color(0x3FFFFFFF),
-                                Color(0xFFF6F6F8),
-                                Color(0xFFF6F6F8),
+                                Color(0x00000000),
+                                Color(0xE2FFF8F9),
+                                Color(0xFFFFF8F9),
                               ],
-                        stops: const <double>[0, 0.72, 0.96, 1],
+                        stops: const <double>[0, 0.68, 1],
                       ),
                     ),
                   ),
@@ -286,8 +284,8 @@ class _DetailPageState extends State<DetailPage> {
                       children: <Widget>[
                         Text(
                           item.title.toUpperCase(),
-                          style: const TextStyle(
-                            color: Color(0xFFE0C17A),
+                          style:  TextStyle(
+                            color: isDarkMode ? Color(0xFFE0C17A) : Color(0xFF98007E),
                             fontSize: 34,
                             height: 0.95,
                             fontWeight: FontWeight.w800,
