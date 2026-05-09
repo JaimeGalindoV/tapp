@@ -3,6 +3,7 @@ import 'package:tapp/pages/config_page.dart';
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? title;
+  final Widget? titleWidget;
   final bool showBackButton;
   final bool logoCentered;
   final bool showConfigButton;
@@ -11,6 +12,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   const CustomAppBar({
     super.key,
     this.title,
+    this.titleWidget,
     this.showBackButton = false,
     this.logoCentered = false,
     this.showConfigButton = true,
@@ -37,9 +39,10 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
           : (!logoCentered
                 ? _buildLogo(useLightAsset: isOverlay || isDark)
                 : null),
-      title: logoCentered
-          ? _buildLogo(useLightAsset: isOverlay || isDark)
-          : Text(title ?? ''),
+      title: titleWidget ??
+          (logoCentered
+              ? _buildLogo(useLightAsset: isOverlay || isDark)
+              : Text(title ?? '')),
       centerTitle: true,
       titleTextStyle: Theme.of(context).textTheme.titleLarge?.copyWith(
         color: foregroundColor,

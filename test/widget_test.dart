@@ -177,6 +177,35 @@ class FakeContentProvider extends ChangeNotifier implements ContentProvider {
 
   @override
   Future<void> refreshContent() async {}
+
+  @override
+  Future<List<SwipeContentItem>> getUnseenCandidates({
+    required Set<String> excludedIds,
+    required int desiredCount,
+  }) async {
+    final currentItem = item;
+    if (currentItem == null || excludedIds.contains(currentItem.id)) {
+      return const <SwipeContentItem>[];
+    }
+    return <SwipeContentItem>[currentItem];
+  }
+
+  @override
+  Future<List<SwipeContentItem>> searchByTitle(String query) async {
+    final currentItem = item;
+    if (currentItem == null) {
+      return const <SwipeContentItem>[];
+    }
+    return currentItem.title.toLowerCase().contains(query.trim().toLowerCase())
+        ? <SwipeContentItem>[currentItem]
+        : const <SwipeContentItem>[];
+  }
+
+  @override
+  Future<void> ensureMinimumContentPool({int minimumCount = 24}) async {}
+
+  @override
+  Future<void> expandContentPool({int batchSize = 12}) async {}
 }
 
 class FakeReviewsProvider extends ChangeNotifier implements ReviewsProvider {
