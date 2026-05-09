@@ -49,6 +49,28 @@ class ReviewsRepository {
     });
   }
 
+  Future<void> upsertRating({
+    required String contentId,
+    required User user,
+    required double rating,
+  }) {
+    final reference = _reviewsCollection(contentId).doc(user.uid);
+    final normalizedRating = rating.clamp(0, 5).toDouble();
+    return _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      final payload = <String, dynamic>{
+        'userId': user.uid,
+        'userDisplayName': _resolveDisplayName(user),
+        'rating': normalizedRating,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (!snapshot.exists || snapshot.data()?['createdAt'] == null) {
+        payload['createdAt'] = FieldValue.serverTimestamp();
+      }
+      transaction.set(reference, payload, SetOptions(merge: true));
+    });
+  }
+
   Future<void> deleteReview({
     required String contentId,
     required String userId,

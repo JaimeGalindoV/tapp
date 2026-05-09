@@ -611,7 +611,7 @@ class _HomePageState extends State<HomePage> {
         color: colorScheme.surface.withValues(alpha: 0.92),
         elevation: 8,
         shadowColor: Colors.black.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(21),
         child: TextField(
           key: const Key('home_search_field'),
           controller: _searchController,
@@ -647,7 +647,15 @@ class _HomePageState extends State<HomePage> {
             filled: true,
             fillColor: Colors.transparent,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(21),
+              borderSide: BorderSide.none,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(21),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(21),
               borderSide: BorderSide.none,
             ),
             contentPadding: const EdgeInsets.symmetric(

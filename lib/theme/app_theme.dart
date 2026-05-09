@@ -28,7 +28,16 @@ class AppTheme {
           disabledBackgroundColor: colorScheme.surfaceContainerHighest,
           disabledForegroundColor: colorScheme.onSurface.withValues(alpha: 0.5),
           padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: const StadiumBorder(),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: colorScheme.primary,
+          disabledForegroundColor: colorScheme.onSurface.withValues(alpha: 0.5),
+          side: BorderSide(color: colorScheme.outline),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: const StadiumBorder(),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
