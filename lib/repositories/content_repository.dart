@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math' as math;
+
 import 'package:tapp/data/swipe_content_data.dart';
 import 'package:tapp/models/swipe_content_item.dart';
 import 'package:tapp/services/tmdb_service.dart';
@@ -10,20 +12,24 @@ class ContentRepository {
 
   final FirebaseFirestore _firestore;
   final TmdbService _tmdbService;
+  final math.Random _random = math.Random();
+
+  static const int _minimumCatalogSize = 24;
+  static const int _defaultRandomBatchSize = 12;
 
   CollectionReference<Map<String, dynamic>> get _contentCollection =>
       _firestore.collection('content');
 
   Future<List<SwipeContentItem>> fetchContent() async {
-    await _ensureSeeded();
+    await _ensureSeededOrBootstrapped();
     final snapshot = await _contentCollection.get();
-    return _sortItems(
+    return _mixItems(
       snapshot.docs.map(SwipeContentItem.fromFirestore).toList(growable: false),
     );
   }
 
   Future<SwipeContentItem?> getContentById(String contentId) async {
-    await _ensureSeeded();
+    await _ensureSeededOrBootstrapped();
     final snapshot = await _contentCollection.doc(contentId).get();
     if (!snapshot.exists) {
       return null;
@@ -32,9 +38,158 @@ class ContentRepository {
   }
 
   Future<List<SwipeContentItem>> refreshContent() async {
-    await _ensureSeeded();
+    await _ensureSeededOrBootstrapped();
+    await fetchAndPersistRandomBatch();
     await syncProvidersFromTmdb();
     return fetchContent();
+  }
+
+  Future<List<SwipeContentItem>> searchByTitle(String query) async {
+    final normalizedQuery = _normalizeQuery(query);
+    if (normalizedQuery.isEmpty) {
+      return const <SwipeContentItem>[];
+    }
+
+    await _ensureSeededOrBootstrapped();
+    var snapshot = await _contentCollection.get();
+    final remoteItems = await _tmdbService.searchByTitle(query);
+    if (remoteItems.isNotEmpty) {
+      await _persistSearchResults(remoteItems, snapshot);
+      snapshot = await _contentCollection.get();
+    }
+
+    final items = snapshot.docs
+        .map(SwipeContentItem.fromFirestore)
+        .where(
+          (item) => _normalizeQuery(item.title).contains(normalizedQuery),
+        )
+        .toList(growable: true);
+    items.sort((a, b) {
+      final aNormalized = _normalizeQuery(a.title);
+      final bNormalized = _normalizeQuery(b.title);
+      final aStarts = aNormalized.startsWith(normalizedQuery);
+      final bStarts = bNormalized.startsWith(normalizedQuery);
+      if (aStarts != bStarts) {
+        return aStarts ? -1 : 1;
+      }
+
+      final titleCompare = a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      if (titleCompare != 0) {
+        return titleCompare;
+      }
+      return b.year.compareTo(a.year);
+    });
+
+    return List<SwipeContentItem>.unmodifiable(items);
+  }
+
+  Future<List<SwipeContentItem>> getUnseenCandidates({
+    required Set<String> excludedIds,
+    required int desiredCount,
+  }) async {
+    if (desiredCount <= 0) {
+      return const <SwipeContentItem>[];
+    }
+
+    await _ensureSeededOrBootstrapped();
+
+    var attempts = 0;
+    while (attempts < 4) {
+      attempts++;
+      final candidates = await _readUnseenCandidates(
+        excludedIds: excludedIds,
+        desiredCount: desiredCount,
+      );
+      if (candidates.length >= desiredCount) {
+        return candidates;
+      }
+
+      final missingCount = desiredCount - candidates.length;
+      final inserted = await fetchAndPersistRandomBatch(
+        targetCount: math.max(_defaultRandomBatchSize, missingCount + 4),
+      );
+      if (inserted <= 0) {
+        return candidates;
+      }
+    }
+
+    return _readUnseenCandidates(
+      excludedIds: excludedIds,
+      desiredCount: desiredCount,
+    );
+  }
+
+  Future<int> ensureMinimumContentPool({int minimumCount = _minimumCatalogSize}) async {
+    await _ensureSeeded();
+    final existingSnapshot = await _contentCollection.get();
+    final currentCount = existingSnapshot.docs.length;
+    if (currentCount >= minimumCount) {
+      return 0;
+    }
+
+    final missingCount = minimumCount - currentCount;
+    return fetchAndPersistRandomBatch(targetCount: missingCount);
+  }
+
+  Future<int> fetchAndPersistRandomBatch({
+    int targetCount = _defaultRandomBatchSize,
+  }) async {
+    if (!_tmdbService.isConfigured || targetCount <= 0) {
+      return 0;
+    }
+
+    final existingSnapshot = await _contentCollection.get();
+    final existingIds = existingSnapshot.docs.map((doc) => doc.id).toSet();
+    final existingKeys = existingSnapshot.docs
+        .map(SwipeContentItem.fromFirestore)
+        .map(_tmdbUniquenessKey)
+        .whereType<String>()
+        .toSet();
+
+    var inserted = 0;
+    var attempts = 0;
+    while (inserted < targetCount && attempts < 4) {
+      attempts++;
+      final batch = await _tmdbService.fetchRandomDiscoverBatch();
+      if (batch.isEmpty) {
+        break;
+      }
+
+      final writeBatch = _firestore.batch();
+      var pendingWrites = 0;
+      for (final item in batch) {
+        if (existingIds.contains(item.id)) {
+          continue;
+        }
+
+        final uniquenessKey = _tmdbUniquenessKey(item);
+        if (uniquenessKey != null && existingKeys.contains(uniquenessKey)) {
+          continue;
+        }
+
+        final enriched = await _tmdbService.enrichContent(item) ?? item;
+        final reference = _contentCollection.doc(item.id);
+        writeBatch.set(reference, <String, dynamic>{
+          ...enriched.toFirestore(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        existingIds.add(item.id);
+        if (uniquenessKey != null) {
+          existingKeys.add(uniquenessKey);
+        }
+        pendingWrites++;
+        inserted++;
+        if (inserted >= targetCount) {
+          break;
+        }
+      }
+
+      if (pendingWrites > 0) {
+        await writeBatch.commit();
+      }
+    }
+
+    return inserted;
   }
 
   Future<void> syncProvidersFromTmdb() async {
@@ -64,6 +219,72 @@ class ContentRepository {
     }
   }
 
+  Future<void> _ensureSeededOrBootstrapped() async {
+    await _ensureSeeded();
+    await ensureMinimumContentPool();
+  }
+
+  Future<void> _persistSearchResults(
+    List<SwipeContentItem> items,
+    QuerySnapshot<Map<String, dynamic>> existingSnapshot,
+  ) async {
+    if (items.isEmpty) {
+      return;
+    }
+
+    final existingIds = existingSnapshot.docs.map((doc) => doc.id).toSet();
+    final existingKeys = existingSnapshot.docs
+        .map(SwipeContentItem.fromFirestore)
+        .map(_tmdbUniquenessKey)
+        .whereType<String>()
+        .toSet();
+
+    final batch = _firestore.batch();
+    var pendingWrites = 0;
+
+    for (final item in items) {
+      if (existingIds.contains(item.id)) {
+        continue;
+      }
+
+      final uniquenessKey = _tmdbUniquenessKey(item);
+      if (uniquenessKey != null && existingKeys.contains(uniquenessKey)) {
+        continue;
+      }
+
+      final enriched = await _tmdbService.enrichContent(item) ?? item;
+      final reference = _contentCollection.doc(item.id);
+      batch.set(reference, <String, dynamic>{
+        ...enriched.toFirestore(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      existingIds.add(item.id);
+      if (uniquenessKey != null) {
+        existingKeys.add(uniquenessKey);
+      }
+      pendingWrites++;
+    }
+
+    if (pendingWrites > 0) {
+      await batch.commit();
+    }
+  }
+
+  Future<List<SwipeContentItem>> _readUnseenCandidates({
+    required Set<String> excludedIds,
+    required int desiredCount,
+  }) async {
+    final snapshot = await _contentCollection.get();
+    final items = _mixItems(
+      snapshot.docs.map(SwipeContentItem.fromFirestore).toList(growable: false),
+    );
+
+    return items
+        .where((item) => !excludedIds.contains(item.id))
+        .take(desiredCount)
+        .toList(growable: false);
+  }
+
   Future<void> _ensureSeeded() async {
     final existing = await _contentCollection.limit(1).get();
     if (existing.docs.isNotEmpty) {
@@ -81,15 +302,21 @@ class ContentRepository {
     await batch.commit();
   }
 
-  List<SwipeContentItem> _sortItems(List<SwipeContentItem> items) {
-    final sorted = List<SwipeContentItem>.from(items);
-    sorted.sort((a, b) {
-      final yearCompare = b.year.compareTo(a.year);
-      if (yearCompare != 0) {
-        return yearCompare;
-      }
-      return a.title.compareTo(b.title);
-    });
-    return List<SwipeContentItem>.unmodifiable(sorted);
+  List<SwipeContentItem> _mixItems(List<SwipeContentItem> items) {
+    final shuffled = List<SwipeContentItem>.from(items);
+    shuffled.shuffle(_random);
+    return List<SwipeContentItem>.unmodifiable(shuffled);
+  }
+
+  static String? _tmdbUniquenessKey(SwipeContentItem item) {
+    final tmdbId = item.tmdbId;
+    if (tmdbId == null) {
+      return null;
+    }
+    return '${item.type.name}:$tmdbId';
+  }
+
+  static String _normalizeQuery(String value) {
+    return value.trim().toLowerCase();
   }
 }
