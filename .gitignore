@@ -48,6 +48,3 @@ app.*.map.json
 .github/
 
 .env
-
-.agents/
-skills-lock.json
