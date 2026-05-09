@@ -40,6 +40,7 @@ class _HomePageState extends State<HomePage> {
   int _swiperGeneration = 0;
   int _searchRequestId = 0;
   Timer? _feedbackHideTimer;
+  Timer? _searchDebounceTimer;
   String _searchQuery = '';
 
   bool get _isSearching => _searchQuery.trim().isNotEmpty;
@@ -58,6 +59,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void dispose() {
     _feedbackHideTimer?.cancel();
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     _swiperController.dispose();
     super.dispose();
@@ -116,20 +118,32 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    final results = await context.read<ContentProvider>().searchByTitle(query);
-    if (!mounted || requestId != _searchRequestId) {
-      return;
+    try {
+      final results = await context.read<ContentProvider>().searchByTitle(query);
+      if (!mounted || requestId != _searchRequestId) {
+        return;
+      }
+
+      final filteredResults = results
+          .where((item) => !_seenContentIds.contains(item.id))
+          .toList(growable: false);
+
+      setState(() {
+        _searchResults = filteredResults;
+        _isSearchLoading = false;
+        _swiperGeneration++;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _searchRequestId) {
+        return;
+      }
+
+      setState(() {
+        _searchResults = const <SwipeContentItem>[];
+        _isSearchLoading = false;
+        _swiperGeneration++;
+      });
     }
-
-    final filteredResults = results
-        .where((item) => !_seenContentIds.contains(item.id))
-        .toList(growable: false);
-
-    setState(() {
-      _searchResults = filteredResults;
-      _isSearchLoading = false;
-      _swiperGeneration++;
-    });
   }
 
   void _clearSearch() {
@@ -496,7 +510,7 @@ class _HomePageState extends State<HomePage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
               const Text(
-                'No se pudo cargar el catalogo.',
+                'No se pudo cargar el catálogo.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -519,7 +533,7 @@ class _HomePageState extends State<HomePage> {
         child: Padding(
           padding: EdgeInsets.symmetric(horizontal: 24),
           child: Text(
-            'No se encontraron titulos con ese nombre.',
+            'No se encontraron títulos con ese nombre.',
             textAlign: TextAlign.center,
           ),
         ),
@@ -533,7 +547,7 @@ class _HomePageState extends State<HomePage> {
           children: <Widget>[
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Buscando mas contenido...'),
+            Text('Buscando más contenido...'),
           ],
         ),
       );
@@ -548,8 +562,8 @@ class _HomePageState extends State<HomePage> {
             children: <Widget>[
               Text(
                 _isFeedExhausted
-                    ? 'Ya no hay mas contenido nuevo por ahora.'
-                    : 'Todavia no hay contenido disponible.',
+                    ? 'Ya no hay más contenido nuevo por ahora.'
+                    : 'Todavía no hay contenido disponible.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -602,7 +616,10 @@ class _HomePageState extends State<HomePage> {
           key: const Key('home_search_field'),
           controller: _searchController,
           onChanged: (value) {
-            unawaited(_handleSearchChanged(value));
+            _searchDebounceTimer?.cancel();
+            _searchDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+              unawaited(_handleSearchChanged(value));
+            });
           },
           textInputAction: TextInputAction.search,
           style: TextStyle(
@@ -613,7 +630,7 @@ class _HomePageState extends State<HomePage> {
             fontWeight: FontWeight.w600,
           ),
           decoration: InputDecoration(
-            hintText: 'Buscar por titulo',
+            hintText: 'Buscar por título',
             hintStyle: TextStyle(
               color: colorScheme.onSurfaceVariant,
               fontSize: 14,
@@ -638,6 +655,10 @@ class _HomePageState extends State<HomePage> {
               vertical: 10,
             ),
           ),
+          onSubmitted: (value) {
+            _searchDebounceTimer?.cancel();
+            unawaited(_handleSearchChanged(value));
+          },
         ),
       ),
     );

@@ -257,6 +257,7 @@ class TmdbService {
     final params = <String, String>{
       'api_key': _apiKey,
       'language': language,
+      'region': region,
       'query': query,
       'page': '1',
       'include_adult': 'false',

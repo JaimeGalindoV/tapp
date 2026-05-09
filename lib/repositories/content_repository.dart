@@ -1,6 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math' as math;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:tapp/data/swipe_content_data.dart';
 import 'package:tapp/models/swipe_content_item.dart';
 import 'package:tapp/services/tmdb_service.dart';
@@ -16,6 +16,7 @@ class ContentRepository {
 
   static const int _minimumCatalogSize = 24;
   static const int _defaultRandomBatchSize = 12;
+  static const int _enrichmentConcurrency = 4;
 
   CollectionReference<Map<String, dynamic>> get _contentCollection =>
       _firestore.collection('content');
@@ -51,20 +52,46 @@ class ContentRepository {
     }
 
     await _ensureSeededOrBootstrapped();
-    var snapshot = await _contentCollection.get();
-    final remoteItems = await _tmdbService.searchByTitle(query);
-    if (remoteItems.isNotEmpty) {
-      await _persistSearchResults(remoteItems, snapshot);
-      snapshot = await _contentCollection.get();
-    }
-
-    final items = snapshot.docs
+    final snapshot = await _contentCollection.get();
+    final localItems = snapshot.docs
         .map(SwipeContentItem.fromFirestore)
         .where(
           (item) => _normalizeQuery(item.title).contains(normalizedQuery),
         )
         .toList(growable: true);
-    items.sort((a, b) {
+
+    final mergedItems = <SwipeContentItem>[
+      ...localItems,
+    ];
+    final seenIds = localItems.map((item) => item.id).toSet();
+    final seenKeys = localItems.map(_tmdbUniquenessKey).whereType<String>().toSet();
+
+    try {
+      final remoteItems = await _tmdbService.searchByTitle(query);
+      if (remoteItems.isNotEmpty) {
+        await _persistSearchResults(remoteItems, snapshot);
+        for (final item in remoteItems) {
+          if (seenIds.contains(item.id)) {
+            continue;
+          }
+
+          final uniquenessKey = _tmdbUniquenessKey(item);
+          if (uniquenessKey != null && seenKeys.contains(uniquenessKey)) {
+            continue;
+          }
+
+          mergedItems.add(item);
+          seenIds.add(item.id);
+          if (uniquenessKey != null) {
+            seenKeys.add(uniquenessKey);
+          }
+        }
+      }
+    } catch (_) {
+      // Fall back to local matches when TMDB is unavailable.
+    }
+
+    mergedItems.sort((a, b) {
       final aNormalized = _normalizeQuery(a.title);
       final bNormalized = _normalizeQuery(b.title);
       final aStarts = aNormalized.startsWith(normalizedQuery);
@@ -80,7 +107,7 @@ class ContentRepository {
       return b.year.compareTo(a.year);
     });
 
-    return List<SwipeContentItem>.unmodifiable(items);
+    return List<SwipeContentItem>.unmodifiable(mergedItems);
   }
 
   Future<List<SwipeContentItem>> getUnseenCandidates({
@@ -155,8 +182,7 @@ class ContentRepository {
         break;
       }
 
-      final writeBatch = _firestore.batch();
-      var pendingWrites = 0;
+      final itemsToInsert = <SwipeContentItem>[];
       for (final item in batch) {
         if (existingIds.contains(item.id)) {
           continue;
@@ -167,16 +193,31 @@ class ContentRepository {
           continue;
         }
 
-        final enriched = await _tmdbService.enrichContent(item) ?? item;
+        itemsToInsert.add(item);
+        existingIds.add(item.id);
+        if (uniquenessKey != null) {
+          existingKeys.add(uniquenessKey);
+        }
+        if (itemsToInsert.length >= targetCount - inserted) {
+          break;
+        }
+      }
+
+      if (itemsToInsert.isEmpty) {
+        continue;
+      }
+
+      final enrichedItems = await _enrichItemsConcurrently(itemsToInsert);
+      final writeBatch = _firestore.batch();
+      var pendingWrites = 0;
+      for (var index = 0; index < itemsToInsert.length; index++) {
+        final item = itemsToInsert[index];
+        final enriched = enrichedItems[index];
         final reference = _contentCollection.doc(item.id);
         writeBatch.set(reference, <String, dynamic>{
           ...enriched.toFirestore(),
           'createdAt': FieldValue.serverTimestamp(),
         });
-        existingIds.add(item.id);
-        if (uniquenessKey != null) {
-          existingKeys.add(uniquenessKey);
-        }
         pendingWrites++;
         inserted++;
         if (inserted >= targetCount) {
@@ -190,6 +231,25 @@ class ContentRepository {
     }
 
     return inserted;
+  }
+
+  Future<List<SwipeContentItem>> _enrichItemsConcurrently(
+    List<SwipeContentItem> items,
+  ) async {
+    final enrichedItems = <SwipeContentItem>[];
+
+    for (var start = 0; start < items.length; start += _enrichmentConcurrency) {
+      final end = math.min(start + _enrichmentConcurrency, items.length);
+      final chunk = items.sublist(start, end);
+      final enrichedChunk = await Future.wait(
+        chunk.map(
+          (item) async => await _tmdbService.enrichContent(item) ?? item,
+        ),
+      );
+      enrichedItems.addAll(enrichedChunk);
+    }
+
+    return enrichedItems;
   }
 
   Future<void> syncProvidersFromTmdb() async {
