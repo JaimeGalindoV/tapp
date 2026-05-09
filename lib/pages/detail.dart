@@ -361,6 +361,9 @@ class _DetailPageState extends State<DetailPage> {
                             if (item.type == ContentType.movie &&
                                 item.durationMinutes != null)
                               '${item.durationMinutes} min',
+                            if (item.type == ContentType.series &&
+                                item.seasonCount != null)
+                              'Temporadas: ${item.seasonCount}',
                             item.year.toString(),
                             ...item.genres,
                           ].join(' | '),

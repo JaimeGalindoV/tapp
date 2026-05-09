@@ -117,6 +117,17 @@ class TmdbService {
       return null;
     }
 
+    final detailPath = item.isMovie ? '/3/movie/$tmdbId' : '/3/tv/$tmdbId';
+    final detailUri = Uri.https(
+      'api.themoviedb.org',
+      detailPath,
+      <String, String>{'api_key': _apiKey, 'language': language},
+    );
+    final detailResponse = await _client.get(detailUri);
+    final detailData = detailResponse.statusCode == 200
+        ? jsonDecode(detailResponse.body) as Map<String, dynamic>
+        : null;
+
     final providerPath = item.isMovie
         ? '/3/movie/$tmdbId/watch/providers'
         : '/3/tv/$tmdbId/watch/providers';
@@ -156,16 +167,32 @@ class TmdbService {
       }
     }
 
-    final overview = (bestMatch?['overview'] as String? ?? '').trim();
-    final posterPath = (bestMatch?['poster_path'] as String? ?? '').trim();
+    final overview =
+        (detailData?['overview'] as String? ??
+                bestMatch?['overview'] as String? ??
+                '')
+            .trim();
+    final posterPath =
+        (detailData?['poster_path'] as String? ??
+                bestMatch?['poster_path'] as String? ??
+                '')
+            .trim();
     final posterUrl = posterPath.isEmpty
         ? item.posterUrl
         : 'https://image.tmdb.org/t/p/w780$posterPath';
+    final runtimeMinutes = item.isMovie
+        ? _positiveInt(detailData?['runtime']) ?? item.durationMinutes
+        : item.durationMinutes;
+    final seasonCount = item.isMovie
+        ? item.seasonCount
+        : _positiveInt(detailData?['number_of_seasons']) ?? item.seasonCount;
 
     return item.copyWith(
       tmdbId: tmdbId,
       overview: overview.isEmpty ? item.overview : overview,
       posterUrl: posterUrl,
+      durationMinutes: runtimeMinutes,
+      seasonCount: seasonCount,
       providers: providers.isEmpty ? item.providers : providers,
       providerUpdatedAt: DateTime.now(),
     );
@@ -371,6 +398,14 @@ class TmdbService {
         .where((genre) => genre.isNotEmpty)
         .take(3)
         .toList(growable: false);
+  }
+
+  static int? _positiveInt(Object? value) {
+    final parsed = (value as num?)?.toInt();
+    if (parsed == null || parsed <= 0) {
+      return null;
+    }
+    return parsed;
   }
 }
 

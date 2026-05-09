@@ -13,6 +13,7 @@ class ContentRepository {
   final FirebaseFirestore _firestore;
   final TmdbService _tmdbService;
   final math.Random _random = math.Random();
+  bool _isBackfillingMetadata = false;
 
   static const int _minimumCatalogSize = 24;
   static const int _defaultRandomBatchSize = 12;
@@ -261,9 +262,11 @@ class ContentRepository {
     for (final document in snapshot.docs) {
       final item = SwipeContentItem.fromFirestore(document);
       final updatedAt = item.providerUpdatedAt;
+      final isMissingMetadata = _isMissingMetadata(item);
       final canSkip =
           updatedAt != null &&
-          DateTime.now().difference(updatedAt) < const Duration(hours: 12);
+          DateTime.now().difference(updatedAt) < const Duration(hours: 12) &&
+          !isMissingMetadata;
       if (canSkip) {
         continue;
       }
@@ -282,6 +285,61 @@ class ContentRepository {
   Future<void> _ensureSeededOrBootstrapped() async {
     await _ensureSeeded();
     await ensureMinimumContentPool();
+    await _backfillMissingMetadata();
+  }
+
+  Future<void> _backfillMissingMetadata() async {
+    if (!_tmdbService.isConfigured || _isBackfillingMetadata) {
+      return;
+    }
+
+    _isBackfillingMetadata = true;
+    try {
+      final snapshot = await _contentCollection.get();
+      final itemsNeedingMetadata = snapshot.docs
+          .map(SwipeContentItem.fromFirestore)
+          .where(_isMissingMetadata)
+          .toList(growable: false);
+      if (itemsNeedingMetadata.isEmpty) {
+        return;
+      }
+
+      final writeBatch = _firestore.batch();
+      var pendingWrites = 0;
+
+      for (var start = 0;
+          start < itemsNeedingMetadata.length;
+          start += _enrichmentConcurrency) {
+        final end = math.min(
+          start + _enrichmentConcurrency,
+          itemsNeedingMetadata.length,
+        );
+        final chunk = itemsNeedingMetadata.sublist(start, end);
+        final enrichedChunk = await Future.wait(
+          chunk.map((item) async => await _tmdbService.enrichContent(item)),
+        );
+
+        for (var index = 0; index < chunk.length; index++) {
+          final item = chunk[index];
+          final enriched = enrichedChunk[index];
+          if (enriched == null || !_hasMoreMetadata(item, enriched)) {
+            continue;
+          }
+
+          writeBatch.update(
+            _contentCollection.doc(item.id),
+            enriched.toFirestore(),
+          );
+          pendingWrites++;
+        }
+      }
+
+      if (pendingWrites > 0) {
+        await writeBatch.commit();
+      }
+    } finally {
+      _isBackfillingMetadata = false;
+    }
   }
 
   Future<void> _persistSearchResults(
@@ -378,5 +436,25 @@ class ContentRepository {
 
   static String _normalizeQuery(String value) {
     return value.trim().toLowerCase();
+  }
+
+  static bool _isMissingMetadata(SwipeContentItem item) {
+    if (item.tmdbId == null) {
+      return false;
+    }
+    return item.isMovie
+        ? item.durationMinutes == null
+        : item.seasonCount == null;
+  }
+
+  static bool _hasMoreMetadata(
+    SwipeContentItem original,
+    SwipeContentItem enriched,
+  ) {
+    if (original.isMovie) {
+      return original.durationMinutes == null &&
+          enriched.durationMinutes != null;
+    }
+    return original.seasonCount == null && enriched.seasonCount != null;
   }
 }
