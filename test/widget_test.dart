@@ -32,7 +32,30 @@ void main() {
     expect(data['type'], 'movie');
     expect(data['providers'], <String>['Netflix', 'Prime Video']);
     expect(data['overview'], 'A test overview.');
+    expect(data['durationMinutes'], 123);
     expect(data['tmdbId'], 999);
+  });
+
+  test('SwipeContentItem serializes seasonCount for series', () {
+    const item = SwipeContentItem(
+      id: 's_test',
+      title: 'Test Series',
+      posterUrl: 'https://example.com/poster.jpg',
+      type: ContentType.series,
+      year: 2024,
+      genres: <String>['Drama'],
+      providers: <String>['Netflix'],
+      rating: 4,
+      overview: 'A test series overview.',
+      seasonCount: 4,
+      tmdbId: 555,
+    );
+
+    final data = item.toFirestore();
+
+    expect(data['type'], 'series');
+    expect(data['seasonCount'], 4);
+    expect(data['durationMinutes'], isNull);
   });
 
   test('AppUserProfile exposes handle and stats label', () {
@@ -109,11 +132,28 @@ void main() {
     expect(find.text('No se pudieron cargar las reseñas.'), findsOneWidget);
     expect(find.text('Todavía no hay reseñas para este título.'), findsNothing);
   });
+
+  testWidgets('DetailPage shows season count for series', (tester) async {
+    await tester.pumpWidget(
+      _buildDetailTestApp(
+        contentProvider: FakeContentProvider(item: _testSeriesItem),
+        reviewsProvider: FakeReviewsProvider(
+          stream: const Stream<List<UserReview>>.empty(),
+        ),
+        contentId: _testSeriesItem.id,
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.textContaining('Temporadas: 4'), findsOneWidget);
+  });
 }
 
 Widget _buildDetailTestApp({
   required ContentProvider contentProvider,
   required ReviewsProvider reviewsProvider,
+  String contentId = 'm_test',
 }) {
   return MultiProvider(
     providers: [
@@ -123,7 +163,7 @@ Widget _buildDetailTestApp({
         value: FakeUserProfileProvider(),
       ),
     ],
-    child: const MaterialApp(home: DetailPage(contentId: 'm_test')),
+    child: MaterialApp(home: DetailPage(contentId: contentId)),
   );
 }
 
@@ -137,6 +177,19 @@ const SwipeContentItem _testItem = SwipeContentItem(
   providers: <String>['Netflix'],
   rating: 4.5,
   overview: 'A test overview.',
+);
+
+const SwipeContentItem _testSeriesItem = SwipeContentItem(
+  id: 's_test',
+  title: 'Test Series',
+  posterUrl: 'https://example.com/poster.jpg',
+  type: ContentType.series,
+  year: 2024,
+  genres: <String>['Drama'],
+  providers: <String>['Netflix'],
+  rating: 4,
+  overview: 'A test series overview.',
+  seasonCount: 4,
 );
 
 class FakeContentProvider extends ChangeNotifier implements ContentProvider {

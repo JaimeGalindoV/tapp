@@ -103,6 +103,8 @@ class TmdbService {
     SwipeContentItem item, {
     String region = 'MX',
     String language = 'es-MX',
+    bool includeDetails = true,
+    bool includeProviders = true,
   }) async {
     if (!isConfigured) {
       return null;
@@ -117,57 +119,96 @@ class TmdbService {
       return null;
     }
 
-    final providerPath = item.isMovie
-        ? '/3/movie/$tmdbId/watch/providers'
-        : '/3/tv/$tmdbId/watch/providers';
-    final providerUri = Uri.https(
-      'api.themoviedb.org',
-      providerPath,
-      <String, String>{'api_key': _apiKey},
-    );
-    final providerResponse = await _client.get(providerUri);
+    Map<String, dynamic>? detailData;
+    if (includeDetails) {
+      final detailPath = item.isMovie ? '/3/movie/$tmdbId' : '/3/tv/$tmdbId';
+      final detailUri = Uri.https(
+        'api.themoviedb.org',
+        detailPath,
+        <String, String>{'api_key': _apiKey, 'language': language},
+      );
+      final detailResponse = await _client.get(detailUri);
+      detailData = detailResponse.statusCode == 200
+          ? jsonDecode(detailResponse.body) as Map<String, dynamic>
+          : null;
+    }
 
-    final providers = <String>[];
-    if (providerResponse.statusCode == 200) {
-      final providerData =
-          jsonDecode(providerResponse.body) as Map<String, dynamic>;
-      final resultsMap = providerData['results'] as Map<String, dynamic>?;
-      final regionData = resultsMap?[region] as Map<String, dynamic>?;
-      final offerLists = <Object?>[
-        regionData?['flatrate'],
-        regionData?['rent'],
-        regionData?['buy'],
-      ];
+    var didRefreshProviders = false;
+    var resolvedProviders = item.providers;
+    if (includeProviders) {
+      final providerPath = item.isMovie
+          ? '/3/movie/$tmdbId/watch/providers'
+          : '/3/tv/$tmdbId/watch/providers';
+      final providerUri = Uri.https(
+        'api.themoviedb.org',
+        providerPath,
+        <String, String>{'api_key': _apiKey},
+      );
+      final providerResponse = await _client.get(providerUri);
 
-      for (final offerList in offerLists) {
-        if (offerList is! List) {
-          continue;
-        }
-        for (final offer in offerList) {
-          if (offer is! Map<String, dynamic>) {
+      if (providerResponse.statusCode == 200) {
+        didRefreshProviders = true;
+        final providers = <String>[];
+        final providerData =
+            jsonDecode(providerResponse.body) as Map<String, dynamic>;
+        final resultsMap = providerData['results'] as Map<String, dynamic>?;
+        final regionData = resultsMap?[region] as Map<String, dynamic>?;
+        final offerLists = <Object?>[
+          regionData?['flatrate'],
+          regionData?['rent'],
+          regionData?['buy'],
+        ];
+
+        for (final offerList in offerLists) {
+          if (offerList is! List) {
             continue;
           }
-          final providerName = (offer['provider_name'] as String? ?? '').trim();
-          if (providerName.isEmpty || providers.contains(providerName)) {
-            continue;
+          for (final offer in offerList) {
+            if (offer is! Map<String, dynamic>) {
+              continue;
+            }
+            final providerName =
+                (offer['provider_name'] as String? ?? '').trim();
+            if (providerName.isEmpty || providers.contains(providerName)) {
+              continue;
+            }
+            providers.add(providerName);
           }
-          providers.add(providerName);
         }
+        resolvedProviders = List<String>.unmodifiable(providers);
       }
     }
 
-    final overview = (bestMatch?['overview'] as String? ?? '').trim();
-    final posterPath = (bestMatch?['poster_path'] as String? ?? '').trim();
+    final overview =
+        (detailData?['overview'] as String? ??
+                bestMatch?['overview'] as String? ??
+                '')
+            .trim();
+    final posterPath =
+        (detailData?['poster_path'] as String? ??
+                bestMatch?['poster_path'] as String? ??
+                '')
+            .trim();
     final posterUrl = posterPath.isEmpty
         ? item.posterUrl
         : 'https://image.tmdb.org/t/p/w780$posterPath';
+    final runtimeMinutes = item.isMovie
+        ? _positiveInt(detailData?['runtime']) ?? item.durationMinutes
+        : item.durationMinutes;
+    final seasonCount = item.isMovie
+        ? item.seasonCount
+        : _positiveInt(detailData?['number_of_seasons']) ?? item.seasonCount;
 
     return item.copyWith(
       tmdbId: tmdbId,
       overview: overview.isEmpty ? item.overview : overview,
       posterUrl: posterUrl,
-      providers: providers.isEmpty ? item.providers : providers,
-      providerUpdatedAt: DateTime.now(),
+      durationMinutes: runtimeMinutes,
+      seasonCount: seasonCount,
+      providers: resolvedProviders,
+      providerUpdatedAt: didRefreshProviders
+          ? DateTime.now()
+          : item.providerUpdatedAt,
     );
   }
 
@@ -371,6 +412,14 @@ class TmdbService {
         .where((genre) => genre.isNotEmpty)
         .take(3)
         .toList(growable: false);
+  }
+
+  static int? _positiveInt(Object? value) {
+    final parsed = (value as num?)?.toInt();
+    if (parsed == null || parsed <= 0) {
+      return null;
+    }
+    return parsed;
   }
 }
 

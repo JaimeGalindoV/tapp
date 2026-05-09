@@ -14,6 +14,7 @@ class SwipeContentItem {
     required this.rating,
     required this.overview,
     this.durationMinutes,
+    this.seasonCount,
     this.tmdbId,
     this.providerUpdatedAt,
   });
@@ -28,6 +29,7 @@ class SwipeContentItem {
   final double rating;
   final String overview;
   final int? durationMinutes;
+  final int? seasonCount;
   final int? tmdbId;
   final DateTime? providerUpdatedAt;
 
@@ -44,6 +46,7 @@ class SwipeContentItem {
     double? rating,
     String? overview,
     int? durationMinutes,
+    int? seasonCount,
     int? tmdbId,
     DateTime? providerUpdatedAt,
   }) {
@@ -58,6 +61,7 @@ class SwipeContentItem {
       rating: rating ?? this.rating,
       overview: overview ?? this.overview,
       durationMinutes: durationMinutes ?? this.durationMinutes,
+      seasonCount: seasonCount ?? this.seasonCount,
       tmdbId: tmdbId ?? this.tmdbId,
       providerUpdatedAt: providerUpdatedAt ?? this.providerUpdatedAt,
     );
@@ -78,6 +82,7 @@ class SwipeContentItem {
       rating: (data['rating'] as num?)?.toDouble() ?? 0,
       overview: (data['overview'] as String? ?? '').trim(),
       durationMinutes: (data['durationMinutes'] as num?)?.toInt(),
+      seasonCount: (data['seasonCount'] as num?)?.toInt(),
       tmdbId: (data['tmdbId'] as num?)?.toInt(),
       providerUpdatedAt: _dateFromValue(data['providerUpdatedAt']),
     );
@@ -94,6 +99,7 @@ class SwipeContentItem {
       'rating': rating,
       'overview': overview,
       'durationMinutes': durationMinutes,
+      'seasonCount': seasonCount,
       'tmdbId': tmdbId,
       'providerUpdatedAt': providerUpdatedAt == null
           ? null
