@@ -354,7 +354,16 @@ class _DetailPageState extends State<DetailPage> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          '${item.type == ContentType.movie ? 'Película' : 'Serie'}${(item.type == ContentType.movie && item.durationMinutes != null) ? '| ${item.durationMinutes} min' : ''} | ${item.year} ${item.genres.join(' | ')}',
+                          <String>[
+                            item.type == ContentType.movie
+                                ? 'Película'
+                                : 'Serie',
+                            if (item.type == ContentType.movie &&
+                                item.durationMinutes != null)
+                              '${item.durationMinutes} min',
+                            item.year.toString(),
+                            ...item.genres,
+                          ].join(' | '),
                           style: TextStyle(
                             color: isDarkMode
                                 ? Colors.white70
