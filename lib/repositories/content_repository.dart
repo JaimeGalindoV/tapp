@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,6 +19,7 @@ class ContentRepository {
   static const int _minimumCatalogSize = 24;
   static const int _defaultRandomBatchSize = 12;
   static const int _enrichmentConcurrency = 4;
+  static const int _firestoreBatchLimit = 450;
 
   CollectionReference<Map<String, dynamic>> get _contentCollection =>
       _firestore.collection('content');
@@ -271,7 +273,11 @@ class ContentRepository {
         continue;
       }
 
-      final enriched = await _tmdbService.enrichContent(item);
+      final enriched = await _tmdbService.enrichContent(
+        item,
+        includeDetails: isMissingMetadata,
+        includeProviders: true,
+      );
       if (enriched == null) {
         continue;
       }
@@ -285,7 +291,7 @@ class ContentRepository {
   Future<void> _ensureSeededOrBootstrapped() async {
     await _ensureSeeded();
     await ensureMinimumContentPool();
-    await _backfillMissingMetadata();
+    unawaited(_backfillMissingMetadata());
   }
 
   Future<void> _backfillMissingMetadata() async {
@@ -304,7 +310,7 @@ class ContentRepository {
         return;
       }
 
-      final writeBatch = _firestore.batch();
+      var writeBatch = _firestore.batch();
       var pendingWrites = 0;
 
       for (var start = 0;
@@ -316,7 +322,13 @@ class ContentRepository {
         );
         final chunk = itemsNeedingMetadata.sublist(start, end);
         final enrichedChunk = await Future.wait(
-          chunk.map((item) async => await _tmdbService.enrichContent(item)),
+          chunk.map(
+            (item) async => await _tmdbService.enrichContent(
+              item,
+              includeDetails: true,
+              includeProviders: false,
+            ),
+          ),
         );
 
         for (var index = 0; index < chunk.length; index++) {
@@ -331,12 +343,19 @@ class ContentRepository {
             enriched.toFirestore(),
           );
           pendingWrites++;
+          if (pendingWrites >= _firestoreBatchLimit) {
+            await writeBatch.commit();
+            writeBatch = _firestore.batch();
+            pendingWrites = 0;
+          }
         }
       }
 
       if (pendingWrites > 0) {
         await writeBatch.commit();
       }
+    } catch (_) {
+      // Metadata backfill is best-effort and should not block normal reads.
     } finally {
       _isBackfillingMetadata = false;
     }
