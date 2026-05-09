@@ -25,6 +25,18 @@ class ReviewsProvider extends ChangeNotifier {
     );
   }
 
+  Future<void> upsertRating({
+    required String contentId,
+    required User user,
+    required double rating,
+  }) {
+    return _repository.upsertRating(
+      contentId: contentId,
+      user: user,
+      rating: rating,
+    );
+  }
+
   Future<void> deleteReview({
     required String contentId,
     required String userId,

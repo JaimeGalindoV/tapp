@@ -21,10 +21,14 @@ class DetailPage extends StatefulWidget {
 class _DetailPageState extends State<DetailPage> {
   late final TextEditingController _reviewController;
   bool _isSaving = false;
+  bool _isSavingRating = false;
   bool _isDeleting = false;
   bool _hasLocalReviewDraft = false;
+  bool _hasLocalRatingDraft = false;
   bool _isApplyingSyncedReviewText = false;
   String _lastSyncedReviewText = '';
+  double? _selectedRating;
+  double? _lastSyncedRating;
 
   @override
   void initState() {
@@ -71,17 +75,20 @@ class _DetailPageState extends State<DetailPage> {
     }
 
     try {
-      final review = await context.read<ReviewsProvider>().getUserReviewForContent(
-        contentId: widget.contentId,
-        userId: user.uid,
-      );
+      final review = await context
+          .read<ReviewsProvider>()
+          .getUserReviewForContent(
+            contentId: widget.contentId,
+            userId: user.uid,
+          );
       if (!mounted) {
         return;
       }
       _applySyncedReviewText(review?.text ?? '');
+      _applySyncedRating(review?.rating);
     } catch (_) {
       if (mounted) {
-        _showMessage('No se pudo cargar tu reseña actual.');
+        _showMessage('No se pudo cargar tu reseña o calificación actual.');
       }
     }
   }
@@ -136,6 +143,7 @@ class _DetailPageState extends State<DetailPage> {
         return;
       }
       _applySyncedReviewText('');
+      _applySyncedRating(null);
       await context.read<UserProfileProvider>().refreshStats(user);
       _showMessage('Reseña eliminada.');
     } catch (_) {
@@ -146,6 +154,41 @@ class _DetailPageState extends State<DetailPage> {
       if (mounted) {
         setState(() {
           _isDeleting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _saveRating(User user, double rating) async {
+    setState(() {
+      _isSavingRating = true;
+      _selectedRating = rating;
+      _hasLocalRatingDraft = true;
+    });
+
+    try {
+      await context.read<ReviewsProvider>().upsertRating(
+        contentId: widget.contentId,
+        user: user,
+        rating: rating,
+      );
+      if (!mounted) {
+        return;
+      }
+      _applySyncedRating(rating);
+      _showMessage('Calificación guardada.');
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _selectedRating = _lastSyncedRating;
+          _hasLocalRatingDraft = false;
+        });
+        _showMessage('No se pudo guardar la calificación.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingRating = false;
         });
       }
     }
@@ -177,7 +220,7 @@ class _DetailPageState extends State<DetailPage> {
             !snapshot.hasData;
         final reviews = snapshot.data ?? const <UserReview>[];
         if (reviewsError == null) {
-          _syncCurrentUserText(reviews);
+          _syncCurrentUserInput(reviews);
         }
         return _buildScaffold(
           context,
@@ -190,34 +233,49 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  void _syncCurrentUserText(List<UserReview> reviews) {
+  void _syncCurrentUserInput(List<UserReview> reviews) {
     final user = _currentUserSafe;
-    if (user == null || _hasLocalReviewDraft) {
+    if (user == null || _hasLocalReviewDraft || _hasLocalRatingDraft) {
       return;
     }
 
     final currentUserReview = _findCurrentUserReview(reviews, user.uid);
     final remoteText = currentUserReview?.text ?? '';
-    if (_lastSyncedReviewText == remoteText &&
-        _reviewController.text == remoteText) {
+    final remoteRating = currentUserReview?.rating;
+    final hasSyncedReview =
+        _lastSyncedReviewText == remoteText &&
+        _reviewController.text == remoteText;
+    final hasSyncedRating =
+        _lastSyncedRating == remoteRating && _selectedRating == remoteRating;
+    if (hasSyncedReview && hasSyncedRating) {
       return;
     }
 
     _applySyncedReviewText(remoteText);
+    _applySyncedRating(remoteRating);
+  }
+
+  void _applySyncedRating(double? rating) {
+    _selectedRating = rating;
+    _lastSyncedRating = rating;
+    _hasLocalRatingDraft = false;
   }
 
   Widget _buildScaffold(
     BuildContext context,
     SwipeContentItem item,
-    List<UserReview> reviews,
-    {String? reviewsError, bool isLoadingReviews = false}
-  ) {
+    List<UserReview> reviews, {
+    String? reviewsError,
+    bool isLoadingReviews = false,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final user = _currentUserSafe;
     final currentUserReview = user == null
         ? null
         : _findCurrentUserReview(reviews, user.uid);
+    final appRating = _buildAppRatingSummary(reviews);
+    final reviewsWithText = _reviewsWithText(reviews);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -284,8 +342,10 @@ class _DetailPageState extends State<DetailPage> {
                       children: <Widget>[
                         Text(
                           item.title.toUpperCase(),
-                          style:  TextStyle(
-                            color: isDarkMode ? Color(0xFFE0C17A) : Color(0xFF98007E),
+                          style: TextStyle(
+                            color: isDarkMode
+                                ? Color(0xFFE0C17A)
+                                : Color(0xFF98007E),
                             fontSize: 34,
                             height: 0.95,
                             fontWeight: FontWeight.w800,
@@ -314,7 +374,8 @@ class _DetailPageState extends State<DetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  if (item.type == ContentType.movie && item.durationMinutes != null)
+                  if (item.type == ContentType.movie &&
+                      item.durationMinutes != null)
                     Text(
                       'Duración: ${item.durationMinutes} min',
                       style: TextStyle(
@@ -366,7 +427,7 @@ class _DetailPageState extends State<DetailPage> {
                             ? '!'
                             : (isLoadingReviews
                                   ? '...'
-                                  : reviews.length.toString()),
+                                  : reviewsWithText.length.toString()),
                         style: TextStyle(
                           color: colorScheme.onSurfaceVariant,
                           fontSize: 22,
@@ -386,6 +447,75 @@ class _DetailPageState extends State<DetailPage> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Calificación Tapp',
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: <Widget>[
+                      ...List<Widget>.generate(5, (index) {
+                        return InkWell(
+                          key: Key('detail_rate_star_${index + 1}'),
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: user == null || _isSavingRating
+                              ? null
+                              : () => _saveRating(user, (index + 1).toDouble()),
+                          child: Icon(
+                              _resolveStarIcon(appRating.average ?? 0, index),
+                              color: colorScheme.onSurface,
+                              size: 31,
+                            ),
+                        );
+                      }),
+                      const SizedBox(width: 10),
+                      Text(
+                        appRating.average == null
+                            ? '-'
+                            : appRating.average!.toStringAsFixed(1),
+                        style: TextStyle(
+                          color: colorScheme.onSurface,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        appRating.average == null
+                            ? 'Sin calificaciones'
+                            : '${appRating.count} votos',
+                        style: TextStyle(
+                          color: colorScheme.onSurfaceVariant,
+                          fontSize: 16,
+                        ),
+                      ),
+                      if (_isSavingRating) ...<Widget>[
+                        const SizedBox(width: 8),
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    user == null
+                        ? 'Inicia sesión para calificar.'
+                        : currentUserReview?.rating == null
+                        ? 'Toca una estrella para calificar.'
+                        : 'Tu voto: ${currentUserReview!.rating!.toStringAsFixed(1)}',
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant,
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 28),
                   Text(
@@ -522,7 +652,7 @@ class _DetailPageState extends State<DetailPage> {
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Center(child: CircularProgressIndicator()),
                     )
-                  else if (reviews.isEmpty)
+                  else if (reviewsWithText.isEmpty)
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -537,7 +667,7 @@ class _DetailPageState extends State<DetailPage> {
                       ),
                     )
                   else
-                    ...reviews.map(
+                    ...reviewsWithText.map(
                       (review) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Container(
@@ -607,10 +737,7 @@ class _DetailPageState extends State<DetailPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Text(
-                resolvedMessage,
-                textAlign: TextAlign.center,
-              ),
+              Text(resolvedMessage, textAlign: TextAlign.center),
               const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: () {
@@ -650,6 +777,39 @@ class _DetailPageState extends State<DetailPage> {
     return null;
   }
 
+  _AppRatingSummary _buildAppRatingSummary(List<UserReview> reviews) {
+    double total = 0;
+    int count = 0;
+    for (final review in reviews) {
+      if (review.rating == null) {
+        continue;
+      }
+      total += review.rating!;
+      count += 1;
+    }
+    if (count == 0) {
+      return const _AppRatingSummary(average: null, count: 0);
+    }
+    return _AppRatingSummary(average: total / count, count: count);
+  }
+
+  List<UserReview> _reviewsWithText(List<UserReview> reviews) {
+    return reviews
+        .where((review) => review.text.trim().isNotEmpty)
+        .toList(growable: false);
+  }
+
+  IconData _resolveStarIcon(double rating, int index) {
+    final threshold = index + 1;
+    if (rating >= threshold) {
+      return Icons.star_rounded;
+    }
+    if (rating >= threshold - 0.5) {
+      return Icons.star_half_rounded;
+    }
+    return Icons.star_outline_rounded;
+  }
+
   User? get _currentUserSafe {
     try {
       return FirebaseAuth.instance.currentUser;
@@ -657,4 +817,11 @@ class _DetailPageState extends State<DetailPage> {
       return null;
     }
   }
+}
+
+class _AppRatingSummary {
+  const _AppRatingSummary({required this.average, required this.count});
+
+  final double? average;
+  final int count;
 }

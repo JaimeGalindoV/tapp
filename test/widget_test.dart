@@ -123,9 +123,7 @@ Widget _buildDetailTestApp({
         value: FakeUserProfileProvider(),
       ),
     ],
-    child: const MaterialApp(
-      home: DetailPage(contentId: 'm_test'),
-    ),
+    child: const MaterialApp(home: DetailPage(contentId: 'm_test')),
   );
 }
 
@@ -235,6 +233,13 @@ class FakeReviewsProvider extends ChangeNotifier implements ReviewsProvider {
     required String contentId,
     required user,
     required String text,
+  }) async {}
+
+  @override
+  Future<void> upsertRating({
+    required String contentId,
+    required user,
+    required double rating,
   }) async {}
 
   @override

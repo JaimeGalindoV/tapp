@@ -5,6 +5,7 @@ class UserReview {
     required this.userId,
     required this.userDisplayName,
     required this.text,
+    this.rating,
     this.createdAt,
     this.updatedAt,
   });
@@ -12,6 +13,7 @@ class UserReview {
   final String userId;
   final String userDisplayName;
   final String text;
+  final double? rating;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -23,6 +25,7 @@ class UserReview {
       userId: (data['userId'] as String? ?? snapshot.id).trim(),
       userDisplayName: (data['userDisplayName'] as String? ?? 'Usuario').trim(),
       text: (data['text'] as String? ?? '').trim(),
+      rating: _ratingFromValue(data['rating']),
       createdAt: _dateFromValue(data['createdAt']),
       updatedAt: _dateFromValue(data['updatedAt']),
     );
@@ -33,11 +36,19 @@ class UserReview {
       'userId': userId,
       'userDisplayName': userDisplayName,
       'text': text,
+      'rating': rating,
       'createdAt': createdAt == null
           ? FieldValue.serverTimestamp()
           : Timestamp.fromDate(createdAt!),
       'updatedAt': FieldValue.serverTimestamp(),
     };
+  }
+
+  static double? _ratingFromValue(Object? value) {
+    if (value is num) {
+      return value.toDouble().clamp(0, 5);
+    }
+    return null;
   }
 
   static DateTime? _dateFromValue(Object? value) {
