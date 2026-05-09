@@ -11,6 +11,7 @@ class ContentProvider extends ChangeNotifier {
   List<SwipeContentItem> _items = const <SwipeContentItem>[];
   bool _isLoading = false;
   String? _errorMessage;
+  bool _isExpandingPool = false;
 
   List<SwipeContentItem> get items =>
       List<SwipeContentItem>.unmodifiable(_items);
@@ -52,6 +53,66 @@ class ContentProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<void> ensureMinimumContentPool({int minimumCount = 24}) async {
+    if (_isExpandingPool) {
+      return;
+    }
+
+    _isExpandingPool = true;
+    try {
+      final inserted = await _repository.ensureMinimumContentPool(
+        minimumCount: minimumCount,
+      );
+      if (inserted > 0) {
+        _items = await _repository.fetchContent();
+        _errorMessage = null;
+        notifyListeners();
+      }
+    } catch (error) {
+      _errorMessage = error.toString();
+      notifyListeners();
+    } finally {
+      _isExpandingPool = false;
+    }
+  }
+
+  Future<void> expandContentPool({int batchSize = 12}) async {
+    if (_isExpandingPool) {
+      return;
+    }
+
+    _isExpandingPool = true;
+    try {
+      final inserted = await _repository.fetchAndPersistRandomBatch(
+        targetCount: batchSize,
+      );
+      if (inserted > 0) {
+        _items = await _repository.fetchContent();
+        _errorMessage = null;
+        notifyListeners();
+      }
+    } catch (error) {
+      _errorMessage = error.toString();
+      notifyListeners();
+    } finally {
+      _isExpandingPool = false;
+    }
+  }
+
+  Future<List<SwipeContentItem>> getUnseenCandidates({
+    required Set<String> excludedIds,
+    required int desiredCount,
+  }) async {
+    return _repository.getUnseenCandidates(
+      excludedIds: excludedIds,
+      desiredCount: desiredCount,
+    );
+  }
+
+  Future<List<SwipeContentItem>> searchByTitle(String query) async {
+    return _repository.searchByTitle(query);
   }
 
   Future<void> ensureContentAvailable(String contentId) async {

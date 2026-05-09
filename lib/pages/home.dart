@@ -22,14 +22,45 @@ enum _SwipeFeedbackType { none, nopp, tapp }
 
 class _HomePageState extends State<HomePage> {
   static const double _bottomNavigationOverlaySpace = 110;
+  static const int _prefetchThreshold = 6;
+  static const int _targetVisibleQueueSize = 18;
+
   final CardSwiperController _swiperController = CardSwiperController();
+  final TextEditingController _searchController = TextEditingController();
+  final Set<String> _seenContentIds = <String>{};
+
+  List<SwipeContentItem> _visibleQueue = const <SwipeContentItem>[];
+  List<SwipeContentItem> _searchResults = const <SwipeContentItem>[];
   _SwipeFeedbackType _feedbackType = _SwipeFeedbackType.none;
   bool _isSwipeActive = false;
+  bool _isInitialFeedLoading = true;
+  bool _isFetchingMore = false;
+  bool _isFeedExhausted = false;
+  bool _isSearchLoading = false;
+  int _swiperGeneration = 0;
+  int _searchRequestId = 0;
   Timer? _feedbackHideTimer;
+  Timer? _searchDebounceTimer;
+  String _searchQuery = '';
+
+  bool get _isSearching => _searchQuery.trim().isNotEmpty;
+
+  List<SwipeContentItem> get _activeItems =>
+      _isSearching ? _searchResults : _visibleQueue;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_initializeFeed());
+    });
+  }
 
   @override
   void dispose() {
     _feedbackHideTimer?.cancel();
+    _searchDebounceTimer?.cancel();
+    _searchController.dispose();
     _swiperController.dispose();
     super.dispose();
   }
@@ -56,23 +87,114 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  Future<void> _initializeFeed() async {
+    final contentProvider = context.read<ContentProvider>();
+    setState(() {
+      _isInitialFeedLoading = true;
+      _isFeedExhausted = false;
+    });
+
+    await contentProvider.ensureMinimumContentPool(
+      minimumCount: _targetVisibleQueueSize,
+    );
+    await _fillVisibleQueue(replaceQueue: true);
+  }
+
+  Future<void> _handleSearchChanged(String value) async {
+    final query = value.trim();
+    final requestId = ++_searchRequestId;
+
+    setState(() {
+      _searchQuery = query;
+      _isSearchLoading = query.isNotEmpty;
+      if (query.isEmpty) {
+        _searchResults = const <SwipeContentItem>[];
+        _swiperGeneration++;
+      }
+    });
+
+    if (query.isEmpty) {
+      _maybeExpandContent();
+      return;
+    }
+
+    try {
+      final results = await context.read<ContentProvider>().searchByTitle(query);
+      if (!mounted || requestId != _searchRequestId) {
+        return;
+      }
+
+      final filteredResults = results
+          .where((item) => !_seenContentIds.contains(item.id))
+          .toList(growable: false);
+
+      setState(() {
+        _searchResults = filteredResults;
+        _isSearchLoading = false;
+        _swiperGeneration++;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _searchRequestId) {
+        return;
+      }
+
+      setState(() {
+        _searchResults = const <SwipeContentItem>[];
+        _isSearchLoading = false;
+        _swiperGeneration++;
+      });
+    }
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _searchRequestId++;
+    setState(() {
+      _searchQuery = '';
+      _searchResults = const <SwipeContentItem>[];
+      _isSearchLoading = false;
+      _swiperGeneration++;
+    });
+    _maybeExpandContent();
+  }
+
   bool _handleSwipe(
-    List<SwipeContentItem> items,
     int previousIndex,
     int? currentIndex,
     CardSwiperDirection direction,
   ) {
-    if (previousIndex >= items.length) {
+    final activeItems = _activeItems;
+    if (previousIndex < 0 || previousIndex >= activeItems.length) {
       return false;
     }
 
     final likesProvider = context.read<LikesProvider>();
-    final item = items[previousIndex];
+    final item = activeItems[previousIndex];
+
+    setState(() {
+      _seenContentIds.add(item.id);
+      _visibleQueue = _visibleQueue
+          .where((candidate) => candidate.id != item.id)
+          .toList(growable: false);
+      _searchResults = _searchResults
+          .where((candidate) => candidate.id != item.id)
+          .toList(growable: false);
+      _swiperGeneration++;
+    });
+
     if (direction.isCloseTo(CardSwiperDirection.right)) {
       likesProvider.addLike(item);
     } else if (direction.isCloseTo(CardSwiperDirection.left) &&
         likesProvider.isLiked(item.id)) {
       likesProvider.removeLike(item.id);
+    }
+
+    if (_isSearching) {
+      if (_searchResults.isEmpty) {
+        unawaited(_handleSearchChanged(_searchQuery));
+      }
+    } else {
+      _maybeExpandContent();
     }
 
     final nextType = direction.isCloseTo(CardSwiperDirection.right)
@@ -83,6 +205,89 @@ class _HomePageState extends State<HomePage> {
 
     _showSwipeFeedback(nextType);
     return true;
+  }
+
+  void _maybeExpandContent() {
+    if (_isFetchingMore || _isFeedExhausted || _isSearching) {
+      return;
+    }
+
+    if (_visibleQueue.length <= _prefetchThreshold) {
+      unawaited(_fillVisibleQueue());
+    }
+  }
+
+  Future<void> _fillVisibleQueue({bool replaceQueue = false}) async {
+    if (_isFetchingMore) {
+      return;
+    }
+
+    final contentProvider = context.read<ContentProvider>();
+    final currentQueue = replaceQueue
+        ? const <SwipeContentItem>[]
+        : List<SwipeContentItem>.from(_visibleQueue);
+    final excludedIds = <String>{
+      ..._seenContentIds,
+      ...currentQueue.map((item) => item.id),
+    };
+    final desiredCount = replaceQueue
+        ? _targetVisibleQueueSize
+        : _targetVisibleQueueSize - currentQueue.length;
+    if (desiredCount <= 0 && !replaceQueue) {
+      return;
+    }
+
+    setState(() {
+      _isFetchingMore = true;
+      if (replaceQueue) {
+        _isFeedExhausted = false;
+      }
+    });
+
+    try {
+      final newItems = await contentProvider.getUnseenCandidates(
+        excludedIds: excludedIds,
+        desiredCount: desiredCount <= 0 ? _targetVisibleQueueSize : desiredCount,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _visibleQueue = replaceQueue
+            ? newItems
+            : <SwipeContentItem>[...currentQueue, ...newItems];
+        _isFeedExhausted = newItems.length <
+            (replaceQueue
+                ? _targetVisibleQueueSize
+                : (desiredCount <= 0 ? 0 : desiredCount));
+        _isFetchingMore = false;
+        _isInitialFeedLoading = false;
+        _swiperGeneration++;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isFetchingMore = false;
+        _isInitialFeedLoading = false;
+      });
+    }
+  }
+
+  Future<void> _refreshCatalog() async {
+    await context.read<ContentProvider>().refreshContent();
+    if (!mounted) {
+      return;
+    }
+    await context.read<ContentProvider>().ensureMinimumContentPool(
+      minimumCount: _targetVisibleQueueSize,
+    );
+    await _fillVisibleQueue(replaceQueue: true);
+    if (_isSearching) {
+      await _handleSearchChanged(_searchQuery);
+    }
   }
 
   Widget _buildMovieCard(BuildContext context, SwipeContentItem movie) {
@@ -225,20 +430,22 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final contentProvider = context.watch<ContentProvider>();
-    final items = contentProvider.items;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
-      appBar: const CustomAppBar(isOverlay: true),
+      appBar: CustomAppBar(
+        isOverlay: true,
+        titleWidget: _buildSearchBar(context),
+      ),
       body: RefreshIndicator(
-        onRefresh: context.read<ContentProvider>().refreshContent,
+        onRefresh: _refreshCatalog,
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: SizedBox(
                 height: constraints.maxHeight,
-                child: _buildBody(context, contentProvider, items),
+                child: _buildBody(context, contentProvider),
               ),
             );
           },
@@ -250,64 +457,13 @@ class _HomePageState extends State<HomePage> {
   Widget _buildBody(
     BuildContext context,
     ContentProvider contentProvider,
-    List<SwipeContentItem> items,
   ) {
-    if (contentProvider.isLoading && items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (contentProvider.errorMessage != null && items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              const Text(
-                'No se pudo cargar el catálogo.',
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              ElevatedButton(
-                onPressed: context.read<ContentProvider>().loadContent,
-                child: const Text('Intentar de nuevo'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (items.isEmpty) {
-      return const Center(child: Text('Todavía no hay contenido disponible.'));
-    }
+    final activeItems = _activeItems;
 
     return Stack(
       fit: StackFit.expand,
       children: <Widget>[
-        CardSwiper(
-          key: const Key('home_card_swiper'),
-          controller: _swiperController,
-          cardsCount: items.length,
-          numberOfCardsDisplayed: items.length > 1 ? 2 : 1,
-          padding: EdgeInsets.zero,
-          backCardOffset: const Offset(0, 36),
-          isLoop: true,
-          onSwipe: (previousIndex, currentIndex, direction) =>
-              _handleSwipe(items, previousIndex, currentIndex, direction),
-          allowedSwipeDirection: const AllowedSwipeDirection.symmetric(
-            horizontal: true,
-          ),
-          cardBuilder:
-              (
-                context,
-                index,
-                horizontalOffsetPercentage,
-                verticalOffsetPercentage,
-              ) {
-                return _buildMovieCard(context, items[index]);
-              },
-        ),
+        _buildContentLayer(context, contentProvider, activeItems),
         Align(
           alignment: const Alignment(0, 0.15),
           child: IgnorePointer(
@@ -332,6 +488,179 @@ class _HomePageState extends State<HomePage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildContentLayer(
+    BuildContext context,
+    ContentProvider contentProvider,
+    List<SwipeContentItem> activeItems,
+  ) {
+    if (_isInitialFeedLoading && _visibleQueue.isEmpty && !_isSearching) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (contentProvider.errorMessage != null &&
+        _visibleQueue.isEmpty &&
+        !_isSearching) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              const Text(
+                'No se pudo cargar el catálogo.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _refreshCatalog,
+                child: const Text('Intentar de nuevo'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_isSearching && _isSearchLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_isSearching && activeItems.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            'No se encontraron títulos con ese nombre.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    if (!_isSearching && _visibleQueue.isEmpty && _isFetchingMore) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Buscando más contenido...'),
+          ],
+        ),
+      );
+    }
+
+    if (!_isSearching && _visibleQueue.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Text(
+                _isFeedExhausted
+                    ? 'Ya no hay más contenido nuevo por ahora.'
+                    : 'Todavía no hay contenido disponible.',
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: _refreshCatalog,
+                child: const Text('Buscar mas contenido'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return CardSwiper(
+      key: ValueKey<String>('home_card_swiper_$_swiperGeneration'),
+      controller: _swiperController,
+      cardsCount: activeItems.length,
+      numberOfCardsDisplayed: activeItems.length > 1 ? 2 : 1,
+      padding: EdgeInsets.zero,
+      backCardOffset: const Offset(0, 36),
+      isLoop: false,
+      onSwipe: (previousIndex, currentIndex, direction) =>
+          _handleSwipe(previousIndex, currentIndex, direction),
+      allowedSwipeDirection: const AllowedSwipeDirection.symmetric(
+        horizontal: true,
+      ),
+      cardBuilder:
+          (
+            context,
+            index,
+            horizontalOffsetPercentage,
+            verticalOffsetPercentage,
+          ) {
+            return _buildMovieCard(context, activeItems[index]);
+          },
+    );
+  }
+
+  Widget _buildSearchBar(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return SizedBox(
+      height: 42,
+      child: Material(
+        color: colorScheme.surface.withValues(alpha: 0.92),
+        elevation: 8,
+        shadowColor: Colors.black.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(18),
+        child: TextField(
+          key: const Key('home_search_field'),
+          controller: _searchController,
+          onChanged: (value) {
+            _searchDebounceTimer?.cancel();
+            _searchDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+              unawaited(_handleSearchChanged(value));
+            });
+          },
+          textInputAction: TextInputAction.search,
+          style: TextStyle(
+            color: Theme.of(context).brightness == Brightness.dark
+                ? Colors.white
+                : colorScheme.onSurface,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+          decoration: InputDecoration(
+            hintText: 'Buscar por título',
+            hintStyle: TextStyle(
+              color: colorScheme.onSurfaceVariant,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            suffixIcon: _searchQuery.isEmpty
+                ? null
+                : IconButton(
+                    key: const Key('home_search_clear_button'),
+                    onPressed: _clearSearch,
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                  ),
+            filled: true,
+            fillColor: Colors.transparent,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(18),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
+          onSubmitted: (value) {
+            _searchDebounceTimer?.cancel();
+            unawaited(_handleSearchChanged(value));
+          },
+        ),
+      ),
     );
   }
 }
